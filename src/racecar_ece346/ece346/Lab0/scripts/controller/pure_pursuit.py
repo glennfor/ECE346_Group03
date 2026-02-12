@@ -180,8 +180,8 @@ class PurePursuitController(Node):
         #   and create a 3-dim numpy array [x,y,1]
         # 3. add the goal to the buffer (self.goal_buffer)
         
-        goal_x = np.float64(goal_msg.position.x) # TO BE FILLED
-        goal_y = np.float64(goal_msg.position.y) # TO BE FILLED
+        goal_x = np.float64(goal_msg.pose.position.x) # TO BE FILLED
+        goal_y = np.float64(goal_msg.pose.position.y) # TO BE FILLED
         goal = np.array([goal_x, goal_y,  1])
         self.goal_buffer.writeFromNonRT(goal)
         
@@ -273,19 +273,22 @@ class PurePursuitController(Node):
                     # 5. clip the steering angle between "-self.steer_max" and "self.steer_max"
                     # 6. apply the simple proportional controller for the acceleration to track the reference_velocity
 
+                    accel = 1.0
+                    steer = 0.0
                     if dis2goal < self.stop_distance: # too close
                         accel = -1.0 # TO BE FILLED
                         steer = 0.0 # TO BE FILLED
-                    elif abs(alpha) > (np.pi/2): # check behind here
-                        sign = -1 if alpha > 0 else 1
-                        steer = sign * self.steer_max
-                        vel_ref = self.max_vel
-                    else: #continue normally
-                        l_d = min(self.ld_max, dis2goal)
+                    else:
                         vel_ref = min(self.max_vel,(dis2goal-self.stop_distance))
-                        accel = self.throttle_gain * vel_ref
-                        steer = np.arctan(2 * self.wheel_base * np.sin(alpha)/ l_d)
-                    steer = np.clip(-self.steer_max, self.steer_max)
+                        if abs(alpha) > (np.pi/2): # check behind here
+                            steer = self.max_steer
+                            vel_ref = self.max_vel
+                        else: #continue normally
+                            l_d = min(self.ld_max, dis2goal)
+                            steer = np.arctan(2 * self.wheel_base * np.sin(alpha)/ l_d)
+                        accel = self.throttle_gain * (vel_ref - vel_cur)
+
+                    steer = np.clip(steer, -self.max_steer, self.max_steer)
 
 
                     ########################### END OF TODO 5 ###########################################
