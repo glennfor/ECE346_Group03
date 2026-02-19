@@ -1,0 +1,46 @@
+traj_planning_node:
+  ros__parameters:
+    odom_topic: /slam_pose
+    control_topic: /control
+    obstacle_topic: /obstacles
+    traj_topic: /Planning/Trajectory
+    routing_path_topic: /Routing/Path 
+    package_path: ece346/Lab1
+    simulation: True
+    receding_horizon: False
+    replan_dt: 0.1
+    #ilqr_params_file: config/lab1_ilqr.yaml, handled inside node
+    #PWM_model: ece346/Lab1/config/mlp_model.sav, handled inside Node
+
+simulator_node:
+  ros__parameters:
+    control_topic: /control
+    odom_topic: /slam_pose
+    pub_rate: 30
+    init_x: 2.0
+    init_y: 0.5
+    init_yaw: 0.0
+    reset_service: /simulation/reset
+    
+
+routing_node:
+  ros__parameters:
+    odom_topic: /slam_pose
+    lane_change_cost: 1.0
+    goal_with_heading: False
+    clicked_goal: True
+    routing_path_topic: /Routing/Path
+    routing_pathL_topic: /Routing/PathL
+    routing_pathR_topic: /Routing/PathR
+    goal_topic: /goal_pose
+    #map_file: maps/track.osm
+  
+visualization_node:
+  ros__parameters:
+    odom_topic: /slam_pose
+    dyn_obs_topic: Obstacles/Dynamic
+
+    
+
+
+    
