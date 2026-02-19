@@ -305,6 +305,23 @@ class TrajectoryPlanner(Node):
         # with np.mod() to make sure x_diff[3] is in the right range)
         accel = 0.0
         steer_rate = 0.0
+        
+       # State error
+        x_diff = x - x_ref
+
+        # Wrap heading error to [-pi, pi] (psi is x[3])
+        x_diff[3] = (x_diff[3] + np.pi) % (2.0 * np.pi) - np.pi
+
+        # iLQR local policy: u = u_ref + K (x - x_ref)
+        # K_closed_loop: (dim_u, dim_x)
+        # u_ref: (dim_u,)
+        u = u_ref + K_closed_loop @ x_diff
+
+        accel = float(u[0])
+        steer_rate = float(u[1])
+
+
+
 
         ##### END OF TODO ##############
 
