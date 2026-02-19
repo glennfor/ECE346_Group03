@@ -145,10 +145,57 @@ class ILQR():
 		calculate backward pass in iLQR
 		'''
 		#TODO 1b
-		
-		K_closed_loop = None
-		k_open_loop = None
-		last_reg = None
+
+		# getting the hessians and jacobians of the cost function
+		q, r, Q, R, H = self.cost.get_derivatives_np(trajectory, controls, path_refs, obs_refs)
+		# getting A and B matrix
+		A, B = self.dyn.get_jacobian_np(trajectory, controls)
+		# initialize K_closed_loop and k_open_loop
+		K_closed_loop = np.zeros((self.dim_u, self.dim_x, self.T))
+		k_open_loop = np.zeros((self.dim_u, self.T))
+		last_reg = self.reg_init
+
+		T = trajectory.shape[1]
+
+		p = q[: , T-1]
+		P = Q[:, :, T-1]
+		t = T-1
+
+		while t >= 0:
+			Q_x = q[:, t] + A[:, :, t].T @ P
+			Q_u = r[:, t] + B[:, :, t].T @ P
+			Q_xx = Q[:, :, t] + A[:, :, t].T @ P @ A[:, :, t]
+			Q_uu = R[:, :, t] + B[:, :, t].T @ P @ B[:, :, t]
+			Q_ux = H[:, :, t] + B[:, :, t].T @ P @ A[:, :, t]
+
+			# regularization
+			reg_matrix = last_reg*np.eye(self.dim_u)
+			Q_uu_reg = R[:, :, t] + B[:, :, t].T @ (P + reg_matrix) @ B[:, :, t]
+			Q_ux_reg = H[:, :, t] + B[:, :, t].T @ (P + reg_matrix) @ A[:, :, t]
+
+			# check if Q_uu is positive definite
+			if not np.all(np.linalg.eigvals(Q_uu_reg) > 0) and last_reg < 1e5:
+				last_reg *= 5
+				t = T-1
+				p = q[: , t]
+				P = Q[:, :, t]
+				continue
+
+			Q_uu_inv = np.linalg.inv(Q_uu_reg)
+
+			# calculating policy 
+			K = -Q_uu_inv @ Q_ux_reg
+			k = -Q_uu_inv @ Q_u
+
+			K_closed_loop[:, :, t] = K
+			k_open_loop[:, t] = k
+
+			# Update value function
+			P = Q_xx + K.T @ Q_uu @ K + K.T @ Q_ux + Q_ux.T @ K
+			p = Q_x + K.T @ Q_uu @ k + K.T @ Q_u + Q_ux.T @ k
+			t -= 1
+
+			last_reg = max(1e-5, self.reg_min)
 	
 		return K_closed_loop, k_open_loop, last_reg
 
