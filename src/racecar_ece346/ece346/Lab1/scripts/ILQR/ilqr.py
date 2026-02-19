@@ -214,15 +214,18 @@ class ILQR():
 		T = x_bar.shape[1]
 
 		# alpha is given already so no need to initialize it
-
+		
 		for t in range(T-1):
-			# computing control
+			# calculate control
 			K = K_closed_loop[:, :, t]
 			k = k_open_loop[:, t]
 			control = u_bar[:, t] + alpha * k + K @ (state[:, t] - x_bar[:, t])
 			state_next, control_clip = self.dyn.integrate_forward_np(state[:, t], control)
 
 			state[:, t+1] = state_next
+			
+			# make sure the angle is between [-pi, pi]
+			state[3, t+1] = (state[3, t+1] + np.pi) % (2 * np.pi) - np.pi
 			
 		return state, control
 
