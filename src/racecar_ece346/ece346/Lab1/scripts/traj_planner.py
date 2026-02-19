@@ -538,6 +538,48 @@ class TrajectoryPlanner(Node):
                 - Publish the new policy for RVIZ visualization
                     for example: self.trajectory_pub.publish(new_policy.to_msg())       
             '''
+
+            if self.plan_state_buffer.new_data_available() and (self.get_clock().now() - t_last_replan) > self.replan_dt and self.planner_ready:
+                # Get current state
+                state = self.plan_state_buffer.readFromRT()[:-1] 
+
+                # Get previous policy
+                prev_policy = self.policy_buffer.readFromRT()
+                if prev_policy is not None:
+                    # Get initial controls for hot start
+                    u_init = prev_policy.get_ref_controls(state[-1])
+                else:
+                    u_init = None
+
+                # Check if there is a new path
+                if self.path_buffer.new_data_available():
+                    new_path = self.path_buffer.readFromRT()
+                    self.planner.update_ref_path(new_path)
+
+                # Replan using ILQR
+                new_plan = self.planner.plan(state, u_init)
+
+                if new_plan is not None:
+                    nominal_trajectory = new_plan['trajectory'] # (dim_x, N)
+                    nominal_controls = new_plan['controls'] # (dim_u, N)
+                    K_closed_loop = new_plan['K_closed_loop'] # (dim_u, dim_x, N)
+                    
+                    T = nominal_trajectory.shape[-1] # number of time steps
+                    t0 = self.get_clock().now().nanoseconds * 1e-9
+
+                    # Create a new policy object
+                    new_policy = Policy(X = nominal_trajectory, 
+                                        U = nominal_controls,
+                                        K = K_closed_loop, 
+                                        t0 = t0, 
+                                        dt = self.planner.dt,
+                                        T = T)
+                    
+                    # Write the new policy to the policy buffer
+                    self.policy_buffer.writeFromNonRT(new_policy)
+                    
+                    # Publish the new policy for RVIZ visualization
+                    self.trajectory_pub.publish(new_policy.to_msg())
             ###############################
             #### END OF TODO #############
             ###############################
