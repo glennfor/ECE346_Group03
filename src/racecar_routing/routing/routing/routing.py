@@ -195,13 +195,13 @@ class Routing(Node):
 
             # Compute tangent using raw waypoints
             if i == 0:
-                # use next point to define direction
-                x_prev, y_prev = path[i + 1][0], path[i + 1][1]
+                # use next point to define forward direction
+                x_next, y_next = path[i + 1][0], path[i + 1][1]
+                dx = x_next - x_c
+                dy = y_next - y_c
             else:
-                x_prev, y_prev = path[i - 1][0], path[i - 1][1]
-
-            dx = x_c - x_prev
-            dy = y_c - y_prev
+                dx = x_c - path[i - 1][0]
+                dy = y_c - path[i - 1][1]
             dr = (dx * dx + dy * dy) ** 0.5
             if dr == 0.0:
                 #default

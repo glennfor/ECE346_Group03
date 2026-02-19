@@ -48,6 +48,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1-mesa-dri \
     libxcb-xinerama0 \
     x11-apps \
+    python3-tk \
+    gfortran \
+    ffmpeg \
     software-properties-common \
     && rm -rf /var/lib/apt/lists/*
 
@@ -57,7 +60,8 @@ RUN add-apt-repository -y ppa:kisak/kisak-mesa && \
     rm -rf /var/lib/apt/lists/*
 
 # ---------- Upgrade pip ----------
-RUN python3 -m pip install --upgrade pip setuptools wheel
+# Pin setuptools < 71 to avoid canonicalize_version incompatibility with pyspline
+RUN python3 -m pip install --upgrade pip "setuptools<71" wheel
 
 # ---------- Python pip dependencies ----------
 COPY requirements.txt /tmp/requirements.txt
@@ -76,9 +80,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN python3 -m pip install --no-cache-dir eigenpy
 RUN python3 -m pip install --no-cache-dir hpp-fcl
 
-# ---------- Install pyspline from local wheel ----------
-COPY HOST_setup/linux/pyspline-1.5.2-py3-none-linux_x86_64.whl /tmp/
-RUN python3 -m pip install --no-cache-dir /tmp/pyspline-1.5.2-py3-none-linux_x86_64.whl
+# ---------- Remove cmeel .pth that interferes with Python startup ----------
+# eigenpy/hpp-fcl install via cmeel, whose .pth file runs during Python site
+# init. Remove it and export the cmeel prefix path via PYTHONPATH instead.
+RUN rm -f /usr/local/lib/python3.8/dist-packages/cmeel.pth
+ENV PYTHONPATH="/usr/local/lib/python3.8/dist-packages/cmeel.prefix/lib/python3.8/site-packages:${PYTHONPATH}"
+
+# ---------- Build pyspline from source (requires gfortran + numpy headers) ----------
+RUN git clone --branch v1.5.2 --depth 1 https://github.com/mdolab/pyspline.git /tmp/pyspline && \
+    cd /tmp/pyspline && \
+    cp config/defaults/config.LINUX_GFORTRAN.mk config/config.mk && \
+    sed -i 's/PYTHON = python$/PYTHON = python3/' config/config.mk && \
+    make && \
+    python3 -m pip install . && \
+    rm -rf /tmp/pyspline
 
 # ---------- Patch transforms3d for numpy >= 1.24 safety ----------
 # np.float was removed in NumPy 1.24. With numpy 1.23.5 this is not strictly

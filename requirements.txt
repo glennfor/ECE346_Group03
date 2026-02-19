@@ -12,3 +12,6 @@ matplotlib
 transforms3d
 PyYAML
 imageio
+tqdm
+jupyter
+ipykernel
