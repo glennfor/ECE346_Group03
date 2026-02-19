@@ -155,11 +155,13 @@ class ILQR():
 		k_open_loop = np.zeros((self.dim_u, self.T))
 		last_reg = self.reg_init
 
+		# getting number of dimentions of trajectory (T)
 		T = trajectory.shape[1]
 
+		# derivative of value function at the last time step
 		p = q[: , T-1]
 		P = Q[:, :, T-1]
-		t = T-1
+		t = T-2
 
 		while t >= 0:
 			Q_x = q[:, t] + A[:, :, t].T @ P
@@ -176,7 +178,7 @@ class ILQR():
 			# check if Q_uu is positive definite
 			if not np.all(np.linalg.eigvals(Q_uu_reg) > 0) and last_reg < 1e5:
 				last_reg *= 5
-				t = T-1
+				t = T-2
 				p = q[: , t]
 				P = Q[:, :, t]
 				continue
@@ -205,8 +207,23 @@ class ILQR():
 		# Note: make sure that the difference in heading is between [-pi, pi]
         # but make sure that the angle is still preserved (e.g. do something
         # with np.mod() to make sure x_diff[3] is in the right range)
-		state = None
-		control = None
+		state = np.zeros(x_bar.shape)
+		control = np.zeros(u_bar.shape)
+
+		state[:, 0] = x_bar[:, 0]
+		T = x_bar.shape[1]
+
+		# alpha is given already so no need to initialize it
+
+		for t in range(T-1):
+			# computing control
+			K = K_closed_loop[:, :, t]
+			k = k_open_loop[:, t]
+			control = u_bar[:, t] + alpha * k + K @ (state[:, t] - x_bar[:, t])
+			state_next, control_clip = self.dyn.integrate_forward_np(state[:, t], control)
+
+			state[:, t+1] = state_next
+			
 		return state, control
 
 	def plan(self, init_state: np.ndarray,
