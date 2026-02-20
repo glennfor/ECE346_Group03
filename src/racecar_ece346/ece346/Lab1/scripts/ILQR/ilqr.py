@@ -162,24 +162,34 @@ class ILQR():
 		# derivative of value function at the last time step
 		p = q[: , T-1]
 		P = Q[:, :, T-1]
+
+		attempt = 0
+
 		t = T-2
 
 		while t >= 0:
-			Q_x = q[:, t] + A[:, :, t].T @ P
-			Q_u = r[:, t] + B[:, :, t].T @ P
+			Q_x = q[:, t] + A[:, :, t].T @ p
+			Q_u = r[:, t] + B[:, :, t].T @ p
 			Q_xx = Q[:, :, t] + A[:, :, t].T @ P @ A[:, :, t]
 			Q_uu = R[:, :, t] + B[:, :, t].T @ P @ B[:, :, t]
 			Q_ux = H[:, :, t] + B[:, :, t].T @ P @ A[:, :, t]
 
 			# regularization
-			reg_matrix = last_reg*np.eye(self.dim_u)
+			reg_matrix = last_reg*np.eye(self.dim_x) # changed to dim x from dimu
 			Q_uu_reg = R[:, :, t] + B[:, :, t].T @ (P + reg_matrix) @ B[:, :, t]
 			Q_ux_reg = H[:, :, t] + B[:, :, t].T @ (P + reg_matrix) @ A[:, :, t]
 
+			is_positive_semidefinite = np.all(np.linalg.eigvals(Q_uu_reg) > 0)
 			# check if Q_uu is positive definite
-			if not np.all(np.linalg.eigvals(Q_uu_reg) > 0) and last_reg < 1e5:
-				last_reg *= 5
+			if not is_positive_semidefinite:
+				last_reg = min(self.reg_max, last_reg * self.reg_scale_up)
+				attempt += 1
+				if attempt >= self.max_attempt or last_reg >= self.reg_max:
+					self.reg = last_reg
+					return None, None, last_reg
 				t = T-2
+				K_closed_loop.fill(0)
+				k_open_loop.fill(0)
 				p = q[: , t]
 				P = Q[:, :, t]
 				continue
@@ -198,7 +208,7 @@ class ILQR():
 			p = Q_x + K.T @ Q_uu @ k + K.T @ Q_u + Q_ux.T @ k
 			t -= 1
 
-			last_reg = max(1e-5, self.reg_min)
+			last_reg = min(self.reg_max, last_reg * self.reg_scale_up)
 	
 		return K_closed_loop, k_open_loop, last_reg
 
