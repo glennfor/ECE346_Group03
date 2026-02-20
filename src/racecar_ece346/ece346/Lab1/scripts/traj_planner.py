@@ -1,39 +1,34 @@
 #!/usr/bin/env python3
 
-import threading
-import rclpy
-from rclpy.node import Node
-import numpy as np
 import os
-import time
 import queue
+import threading
+import time
 
-from .utils.generate_pwm import GeneratePwm
-from .utils.policy import Policy
-from .utils.realtime_buffer import RealtimeBuffer
-
-from .ILQR.ref_path import RefPath
-from .ILQR.ilqr import ILQR
-
-from rclpy.time import Time
+import numpy as np
+import rclpy
+#for packages
+from ament_index_python.packages import get_package_share_directory
+from ece346.Lab1.scripts.ILQR.config import Config
+from nav_msgs.msg import Odometry
+from nav_msgs.msg import \
+    Path as PathMsg  # used to display the trajectory on RVIZ
+#dynamic reconfigure imports
+from rcl_interfaces.msg import (FloatingPointRange, ParameterDescriptor,
+                                SetParametersResult)
 from rclpy.clock import Clock
+from rclpy.node import Node
+from rclpy.time import Time
+from scipy.spatial.transform import Rotation as R
+from std_srvs.srv import Empty
 
 from racecar_msgs.msg import ServoMsg
 
-#for packages
-from ament_index_python.packages import get_package_share_directory
-
-
-from scipy.spatial.transform import Rotation as R
-from nav_msgs.msg import Odometry
-from nav_msgs.msg import Path as PathMsg # used to display the trajectory on RVIZ
-from std_srvs.srv import Empty
-
-#dynamic reconfigure imports
-from rcl_interfaces.msg import ParameterDescriptor, FloatingPointRange
-from rcl_interfaces.msg import SetParametersResult
-
-from ece346.Lab1.scripts.ILQR.config import Config
+from .ILQR.ilqr import ILQR
+from .ILQR.ref_path import RefPath
+from .utils.generate_pwm import GeneratePwm
+from .utils.policy import Policy
+from .utils.realtime_buffer import RealtimeBuffer
 
 # You will use the imports below for lab3   
 # from racecar_msgs.msg import OdometryArray
@@ -319,9 +314,6 @@ class TrajectoryPlanner(Node):
 
         accel = float(u[0])
         steer_rate = float(u[1])
-
-
-
 
         ##### END OF TODO ##############
 
