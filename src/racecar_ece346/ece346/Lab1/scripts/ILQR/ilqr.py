@@ -1,18 +1,19 @@
-from typing import Tuple, Optional, Dict, Union
+import os
 #from jaxlib.xla_extension import ArrayImpl, depreciated
 import time
-import os
-import numpy as np
-import jax
-from jax import Array as jax_array
-from .dynamics.bicycle5d import Bicycle5D
-from .cost.cost import Cost
-from .cost.collision_checker.collision_checker import CollisionChecker 
-from .cost.collision_checker.obstacle import Obstacle
-from .ref_path import RefPath
-from .config import Config
+from typing import Dict, Optional, Tuple, Union
 
-import rclpy # For logging
+import jax
+import numpy as np
+import rclpy  # For logging
+from jax import Array as jax_array
+
+from .config import Config
+from .cost.collision_checker.collision_checker import CollisionChecker
+from .cost.collision_checker.obstacle import Obstacle
+from .cost.cost import Cost
+from .dynamics.bicycle5d import Bicycle5D
+from .ref_path import RefPath
 
 status_lookup = ['Iteration Limit Exceed',
                 'Converged',
@@ -211,22 +212,22 @@ class ILQR():
 		control = np.zeros(u_bar.shape)
 
 		state[:, 0] = x_bar[:, 0]
-		T = x_bar.shape[1]
-
-		# alpha is given already so no need to initialize it
 		
-		for t in range(T-1):
+		for t in range(self.T-1):
 			# calculate control
 			K = K_closed_loop[:, :, t]
 			k = k_open_loop[:, t]
-			control = u_bar[:, t] + alpha * k + K @ (state[:, t] - x_bar[:, t])
-			state_next, control_clip = self.dyn.integrate_forward_np(state[:, t], control)
+			x_diff = state[:, t] - x_bar[:, t]
+			# make sure the heading difference is between [-pi, pi]
+			x_diff[3] = np.mod(x_diff[3] + np.pi, 2 * np.pi) - np.pi
+			u = u_bar[:, t] + alpha * k + K @ x_diff
+			state_next, control_clip = self.dyn.integrate_forward_np(state[:, t], u)
 
 			state[:, t+1] = state_next
-			
-			# make sure the angle is between [-pi, pi]
-			state[3, t+1] = (state[3, t+1] + np.pi) % (2 * np.pi) - np.pi
-			
+			control[:, t] = control_clip
+		
+		# define the last element of the state for to keep the shape consistent
+		control[:, -1] = u_bar[:, -1]
 		return state, control
 
 	def plan(self, init_state: np.ndarray,
@@ -330,6 +331,72 @@ class ILQR():
         #   Q: np.ndarray, (dim_x, dim_u, T) hessian of cost function w.r.t. states
         #   R: np.ndarray, (dim_u, dim_u, T) hessian of cost function w.r.t. controls
         #   H: np.ndarray, (dim_x, dim_u, T) hessian of cost function w.r.t. states and controls
+
+		self.reg = self.reg_init
+		# status:
+		#   0 -> reached iteration limit without early convergence
+		#   1 -> converged (cost improvement below tol)
+		#   2 -> failed (line search / backward pass could not recover)
+		status = 0
+		K_closed_loop = np.zeros((self.dim_u, self.dim_x, self.T))
+		k_open_loop = np.zeros((self.dim_u, self.T))
+		num_iter = 0 # number of iterations it takes to converge
+
+		for i in range(self.max_iter):
+			num_iter = i + 1
+			# Recompute references at each iterate because nominal trajectory changes.
+			path_refs, obs_refs = self.get_references(trajectory)
+			K_candidate, k_candidate, reg_candidate = self.backward_pass(
+				trajectory, controls, path_refs, obs_refs
+			)
+			self.reg = reg_candidate
+
+			if K_candidate is None:
+				# This means that the backward pass failed to find a numerically stable backward pass.
+				status = 2
+				break
+
+			is_line_search_successful = False
+			best_improvement = 0.0
+
+			for alpha in self.alphas:
+				# This is the candidate rollout for this line-search step.
+				new_trajectory, new_controls = self.forward_pass(
+					trajectory, controls, K_candidate, k_candidate, alpha
+				)
+				new_path_refs, new_obs_refs = self.get_references(new_trajectory)
+				J_new = self.cost.get_traj_cost(
+					new_trajectory, new_controls, new_path_refs, new_obs_refs
+				)
+
+				if np.isfinite(J_new) and J_new < J:
+					# This means that the candidate rollout is better than the current trajectory.
+					# We accept the candidate rollout and update the trajectory, controls, and the cost.	
+					best_improvement = J - J_new
+					trajectory = new_trajectory
+					controls = new_controls
+					J = J_new
+					K_closed_loop = K_candidate
+					k_open_loop = k_candidate
+					is_line_search_successful = True
+					break
+
+			if is_line_search_successful:
+				# Successful iteration: reduce regularization for next iteration.
+				self.reg = max(self.reg_min, self.reg / self.reg_scale_down)
+				# If the improvement is less than the tolerance, we stop the iteration
+				# because the iteration has converged.
+				if best_improvement < self.tol:
+					# Stop when one full iLQR iteration gives any improvement.
+					status = 1
+					break
+			else:
+				# This means that the candidate rollout is not better than the current trajectory.
+				# We increase the regularization and retry the backward pass.
+				self.reg = min(self.reg_max, self.reg * self.reg_scale_up)
+				if self.reg >= self.reg_max:
+					status = 2
+					break
 		
 		########################### #END of TODO 1 #####################################
 
@@ -338,9 +405,11 @@ class ILQR():
 				t_process=t_process, # Time spent on planning
 				trajectory = trajectory,
 				controls = controls,
-				status= None, #	TODO: Fill this in
-				K_closed_loop= None, # TODO: Fill this in
-				k_open_loop= None # TODO: Fill this in
+				status= status,
+				K_closed_loop= K_closed_loop,
+				k_open_loop= k_open_loop,
+				J=J,
+				num_iter=num_iter
 				# Optional TODO: Fill in other information you want to return
 		)
 		return solver_info
