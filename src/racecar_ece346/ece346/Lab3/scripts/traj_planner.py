@@ -1,45 +1,42 @@
 #!/usr/bin/env python3
 
-import threading
-import rclpy
-from rclpy.node import Node
-import numpy as np
 import os
-import time
 import queue
+import threading
+import time
 
+import numpy as np
+import rclpy
+#for packages
+from ament_index_python.packages import get_package_share_directory
+from ece346.Lab1.scripts.ILQR.config import Config
+from nav_msgs.msg import Odometry
+from nav_msgs.msg import \
+    Path as PathMsg  # used to display the trajectory on RVIZ
+#dynamic reconfigure imports
+from rcl_interfaces.msg import (FloatingPointRange, ParameterDescriptor,
+                                SetParametersResult)
+from rclpy.clock import Clock
+from rclpy.node import Node
+from rclpy.time import Time
+from scipy.spatial.transform import Rotation as R
+from std_srvs.srv import Empty
+
+from racecar_msgs.msg import ServoMsg
+
+from .ILQR.ilqr import ILQR
+from .ILQR.ref_path import RefPath
 from .utils.generate_pwm import GeneratePwm
 from .utils.policy import Policy
 from .utils.realtime_buffer import RealtimeBuffer
 
-from .ILQR.ref_path import RefPath
-from .ILQR.ilqr import ILQR
-
-from rclpy.time import Time
-from rclpy.clock import Clock
-
-from racecar_msgs.msg import ServoMsg
-
-#for packages
-from ament_index_python.packages import get_package_share_directory
-
-
-from scipy.spatial.transform import Rotation as R
-from nav_msgs.msg import Odometry
-from nav_msgs.msg import Path as PathMsg # used to display the trajectory on RVIZ
-from std_srvs.srv import Empty
-
-#dynamic reconfigure imports
-from rcl_interfaces.msg import ParameterDescriptor, FloatingPointRange
-from rcl_interfaces.msg import SetParametersResult
-
-from .ILQR.config import Config
-
+# You will use the imports below for lab3   
 from racecar_msgs.msg import OdometryArray
 from ece346.Lab3.scripts.utils.dyn_obstacle import frs_to_obstacle, frs_to_msg
 from ece346.Lab3.scripts.utils.static_obstacle import get_obstacle_vertices
 from visualization_msgs.msg import MarkerArray
 from racecar_ece346.srv import GetFRS  
+
 
 class TrajectoryPlanner(Node):
     '''
@@ -96,7 +93,7 @@ class TrajectoryPlanner(Node):
 
         self.declare_parameter('odom_topic', 'slam_pose')
         self.declare_parameter('control_topic', '/control')
-        self.declare_parameter('static_obstacles_topic', '/Obstacles/Static')
+        self.declare_parameter('obstacles_topic', 'obstacles')
         self.declare_parameter('traj_topic', '/Planning/Trajectory')
         self.declare_parameter('planning_start', '/Planning/Start')
         self.declare_parameter('planning_stop', '/Planning/Stop')
@@ -105,7 +102,7 @@ class TrajectoryPlanner(Node):
         self.declare_parameter('simulation', True)
         self.declare_parameter('receding_horizon', False)
         self.declare_parameter('replan_dt', 0.1)
-        self.declare_parameter('ilqr_params_file', os.path.join(self.package, "config", "lab3_ilqr.yaml"))
+        self.declare_parameter('ilqr_params_file', os.path.join(self.package, "config", "lab1_ilqr.yaml"))
         self.declare_parameter('PWM_model', os.path.join(self.package, "config", "mlp_model.sav"))
         self.declare_parameter('max_throttle', 0.5)
         self.declare_parameter('min_throttle', -0.35)
@@ -126,6 +123,8 @@ class TrajectoryPlanner(Node):
         # Read ROS topic names to publish
         self.control_topic = self.get_parameter('control_topic').value
         self.traj_topic = self.get_parameter('traj_topic').value
+        #Lab 3 Task 1.1 Comment if Lab 2
+        self.static_obstacles_topic = self.get_parameter('obstacles_topic').value
         
         # Read the simulation flag, 
         # if the flag is true, we are in simulation 
@@ -157,7 +156,8 @@ class TrajectoryPlanner(Node):
         self.policy_buffer = RealtimeBuffer()
         self.path_buffer = RealtimeBuffer()
 
-
+        #Lab 3 Task 1.3 Comment if Lab 2
+        self.static_obstacle_dict = {}
 
         # Indicate if the planner is ready to generate a new trajectory
         self.planner_ready = True
@@ -183,13 +183,20 @@ class TrajectoryPlanner(Node):
         self.pose_sub = self.create_subscription(Odometry, self.odom_topic, self.odometry_callback, 10)
         self.path_sub = self.create_subscription(PathMsg, self.path_topic, self.path_callback, 10)
 
+        #Lab 3 Task 1.2 Comment if Lab 2
+        self.static_obs_sub = self.create_subscription(MarkerArray, self.static_obstacles_topic, self.static_obstacle_callback, 10)
 
-    #Lab 3 Task 1.4
+    #Lab 3 Task 1.4 Comment if Lab 2
     def static_obstacle_callback(self, msg):
         '''
         Static obstacle callback function
         '''
-        return 0
+        if self.simulation:
+            self.static_obstacle_dict.clear()
+
+        for obs in msg.markers:
+            obstacle_id, vertices = get_obstacle_vertices(obs)
+            self.static_obstacle_dict[obstacle_id] = vertices
 
 
     def setup_service(self):
@@ -203,20 +210,7 @@ class TrajectoryPlanner(Node):
         self.add_on_set_parameters_callback(self._on_params)
 
         #lab 3 Task 3 TBD
-        self.frs_client = self.create_client(GetFRS, '/obstacles/get_frs')
-
-    def get_frs(self, t_list):
-        req = GetFRS.Request()
-        req.t_list = list(t_list)
-        try:
-            response = self.frs_client.call(req)   # synchronous call
-            return response
-        except Exception as e:
-            self.get_logger().warn(f"FRS service call failed inside get_frs(): {e}")
-            return None
-
-    def frs_available(self):
-        return self.frs_client.wait_for_service(timeout_sec=0.0)
+        # self.get_frs = rospy.ServiceProxy('/obstacles/get_frs', GetFRS)
 
     def start_planning_cb(self, req, res):
         '''
@@ -306,9 +300,22 @@ class TrajectoryPlanner(Node):
         # Hint: make sure that the difference in heading is between [-pi, pi]
         # but make sure that the angle is still preserved (e.g. do something
         # with np.mod() to make sure x_diff[3] is in the right range)
-
         accel = 0.0
         steer_rate = 0.0
+        
+       # State error
+        x_diff = x - x_ref
+
+        # Wrap heading error to [-pi, pi] (psi is x[3])
+        x_diff[3] = (x_diff[3] + np.pi) % (2.0 * np.pi) - np.pi
+
+        # iLQR local policy: u = u_ref + K (x - x_ref)
+        # K_closed_loop: (dim_u, dim_x)
+        # u_ref: (dim_u,)
+        u = u_ref + K_closed_loop @ x_diff
+
+        accel = float(u[0])
+        steer_rate = float(u[1])
 
         ##### END OF TODO ##############
 
@@ -542,6 +549,64 @@ class TrajectoryPlanner(Node):
                 - Publish the new policy for RVIZ visualization
                     for example: self.trajectory_pub.publish(new_policy.to_msg())       
             '''
+
+            if self.plan_state_buffer.new_data_available and self.planner_ready:
+                # Get current state
+                state = self.plan_state_buffer.readFromRT() 
+            
+                if state is None:
+                    continue    
+                t_current = state[-1]
+                if t_current - t_last_replan < self.replan_dt:
+                    continue
+                t_last_replan = t_current
+
+                # Get previous policy
+                prev_policy = self.policy_buffer.readFromRT()
+                if prev_policy is not None:
+                    # Get initial controls for hot start
+                    u_init = prev_policy.get_ref_controls(t_current)
+                else:
+                    u_init = None
+
+                
+                #---updates
+                obstacles_list = []
+                obstacles_list.extend(self.static_obstacle_dict.values())
+
+                # frs = self.get_frs()
+                # response = frs.
+                
+                self.planner.update_obstacles(obstacles_list)
+
+                # Check if there is a new path
+                if self.path_buffer.new_data_available:
+                    new_path = self.path_buffer.readFromRT()
+                    self.planner.update_ref_path(new_path)
+
+                # Replan using ILQR
+                new_plan = self.planner.plan(state[:-1], u_init)
+
+                if new_plan is not None and new_plan['status'] != -1:
+                    nominal_trajectory = new_plan['trajectory'] # (dim_x, N)
+                    nominal_controls = new_plan['controls'] # (dim_u, N)
+                    K_closed_loop = new_plan['K_closed_loop'] # (dim_u, dim_x, N)
+                    
+                    T = nominal_trajectory.shape[-1] # number of time steps
+
+                    # Create a new policy object
+                    new_policy = Policy(X = nominal_trajectory, 
+                                        U = nominal_controls,
+                                        K = K_closed_loop, 
+                                        t0 = t_current, 
+                                        dt = self.planner.dt,
+                                        T = T)
+                    
+                    # Write the new policy to the policy buffer
+                    self.policy_buffer.writeFromNonRT(new_policy)
+                    
+                    # Publish the new policy for RVIZ visualization
+                    self.trajectory_pub.publish(new_policy.to_msg())
             ###############################
             #### END OF TODO #############
             ###############################
