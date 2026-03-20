@@ -1,39 +1,34 @@
 #!/usr/bin/env python3
 
-import threading
-import rclpy
-from rclpy.node import Node
-import numpy as np
 import os
-import time
 import queue
+import threading
+import time
 
-from .utils.generate_pwm import GeneratePwm
-from .utils.policy import Policy
-from .utils.realtime_buffer import RealtimeBuffer
-
-from .ILQR.ref_path import RefPath
-from .ILQR.ilqr import ILQR
-
-from rclpy.time import Time
+import numpy as np
+import rclpy
+#for packages
+from ament_index_python.packages import get_package_share_directory
+from ece346.Lab1.scripts.ILQR.config import Config
+from nav_msgs.msg import Odometry
+from nav_msgs.msg import \
+    Path as PathMsg  # used to display the trajectory on RVIZ
+#dynamic reconfigure imports
+from rcl_interfaces.msg import (FloatingPointRange, ParameterDescriptor,
+                                SetParametersResult)
 from rclpy.clock import Clock
+from rclpy.node import Node
+from rclpy.time import Time
+from scipy.spatial.transform import Rotation as R
+from std_srvs.srv import Empty
 
 from racecar_msgs.msg import ServoMsg
 
-#for packages
-from ament_index_python.packages import get_package_share_directory
-
-
-from scipy.spatial.transform import Rotation as R
-from nav_msgs.msg import Odometry
-from nav_msgs.msg import Path as PathMsg # used to display the trajectory on RVIZ
-from std_srvs.srv import Empty
-
-#dynamic reconfigure imports
-from rcl_interfaces.msg import ParameterDescriptor, FloatingPointRange
-from rcl_interfaces.msg import SetParametersResult
-
-from ece346.Lab1.scripts.ILQR.config import Config
+from .ILQR.ilqr import ILQR
+from .ILQR.ref_path import RefPath
+from .utils.generate_pwm import GeneratePwm
+from .utils.policy import Policy
+from .utils.realtime_buffer import RealtimeBuffer
 
 # You will use the imports below for lab3   
 # from racecar_msgs.msg import OdometryArray
@@ -305,6 +300,20 @@ class TrajectoryPlanner(Node):
         # with np.mod() to make sure x_diff[3] is in the right range)
         accel = 0.0
         steer_rate = 0.0
+        
+       # State error
+        x_diff = x - x_ref
+
+        # Wrap heading error to [-pi, pi] (psi is x[3])
+        x_diff[3] = (x_diff[3] + np.pi) % (2.0 * np.pi) - np.pi
+
+        # iLQR local policy: u = u_ref + K (x - x_ref)
+        # K_closed_loop: (dim_u, dim_x)
+        # u_ref: (dim_u,)
+        u = u_ref + K_closed_loop @ x_diff
+
+        accel = float(u[0])
+        steer_rate = float(u[1])
 
         ##### END OF TODO ##############
 
@@ -538,6 +547,48 @@ class TrajectoryPlanner(Node):
                 - Publish the new policy for RVIZ visualization
                     for example: self.trajectory_pub.publish(new_policy.to_msg())       
             '''
+
+            if self.plan_state_buffer.new_data_available() and (self.get_clock().now() - t_last_replan) > self.replan_dt and self.planner_ready:
+                # Get current state
+                state = self.plan_state_buffer.readFromRT()[:-1] 
+
+                # Get previous policy
+                prev_policy = self.policy_buffer.readFromRT()
+                if prev_policy is not None:
+                    # Get initial controls for hot start
+                    u_init = prev_policy.get_ref_controls(state[-1])
+                else:
+                    u_init = None
+
+                # Check if there is a new path
+                if self.path_buffer.new_data_available():
+                    new_path = self.path_buffer.readFromRT()
+                    self.planner.update_ref_path(new_path)
+
+                # Replan using ILQR
+                new_plan = self.planner.plan(state, u_init)
+
+                if new_plan is not None:
+                    nominal_trajectory = new_plan['trajectory'] # (dim_x, N)
+                    nominal_controls = new_plan['controls'] # (dim_u, N)
+                    K_closed_loop = new_plan['K_closed_loop'] # (dim_u, dim_x, N)
+                    
+                    T = nominal_trajectory.shape[-1] # number of time steps
+                    t0 = self.get_clock().now().nanoseconds * 1e-9
+
+                    # Create a new policy object
+                    new_policy = Policy(X = nominal_trajectory, 
+                                        U = nominal_controls,
+                                        K = K_closed_loop, 
+                                        t0 = t0, 
+                                        dt = self.planner.dt,
+                                        T = T)
+                    
+                    # Write the new policy to the policy buffer
+                    self.policy_buffer.writeFromNonRT(new_policy)
+                    
+                    # Publish the new policy for RVIZ visualization
+                    self.trajectory_pub.publish(new_policy.to_msg())
             ###############################
             #### END OF TODO #############
             ###############################
