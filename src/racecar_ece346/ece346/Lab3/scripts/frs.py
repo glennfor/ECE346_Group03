@@ -45,7 +45,14 @@ def multistep_zonotope_reachset(init_box, a_mat, b_mat, input_box, dt_list, quic
     #     z: the reachable set as a zonotope
     ############################
 
-
+    z_cur = init_z
+    for dt in dt_list:
+        # use only + valyes since - values don't make sense for dt 
+        dt = max(float(dt), 0.0)
+        z_cur = onestep_zonotope_reachset(
+            z_cur, a_mat, b_mat, input_box, dt, quick=quick
+        )
+        reachable_set_list.append(z_cur)
 
     return reachable_set_list
         

@@ -93,7 +93,13 @@ class TrajectoryPlanner(Node):
 
         self.declare_parameter('odom_topic', 'slam_pose')
         self.declare_parameter('control_topic', '/control')
-        self.declare_parameter('obstacles_topic', 'obstacles')
+        # self.declare_parameter('obstacles_topic', 'obstacles')
+
+        self.declare_parameter('static_obstacles_topic', '/Obstacles/Static')
+        self.declare_parameter('obstacles_topic', '/Obstacles/Static')
+        self.declare_parameter('obstacle_topic', '/Obstacles/Static')
+
+
         self.declare_parameter('traj_topic', '/Planning/Trajectory')
         self.declare_parameter('planning_start', '/Planning/Start')
         self.declare_parameter('planning_stop', '/Planning/Stop')
@@ -124,8 +130,13 @@ class TrajectoryPlanner(Node):
         self.control_topic = self.get_parameter('control_topic').value
         self.traj_topic = self.get_parameter('traj_topic').value
         #Lab 3 Task 1.1 Comment if Lab 2
-        self.static_obstacles_topic = self.get_parameter('obstacles_topic').value
-        
+        # self.static_obstacles_topic = self.get_parameter('obstacles_topic').value
+        # dpending on name, try diffrent ones
+        self.static_obstacles_topic = self.get_parameter('static_obstacles_topic').value
+        if self.static_obstacles_topic in (None, ''):
+            self.static_obstacles_topic = self.get_parameter('obstacles_topic').value
+        if self.static_obstacles_topic in (None, ''):
+            self.static_obstacles_topic = self.get_parameter('obstacle_topic').value
         # Read the simulation flag, 
         # if the flag is true, we are in simulation 
         # and no need to convert the throttle and steering angle to PWM
@@ -198,6 +209,38 @@ class TrajectoryPlanner(Node):
             obstacle_id, vertices = get_obstacle_vertices(obs)
             self.static_obstacle_dict[obstacle_id] = vertices
 
+    def _get_static_obstacles(self):
+        '''
+        Return a thread-tolerant snapshot of current static obstacles.
+        '''
+        return list(self.static_obstacle_dict.copy().values())
+
+    def _get_dynamic_obstacles(self, t_current):
+        '''
+        Non-blocking FRS query: return latest available dynamic obstacles.
+        '''
+        if not self.frs_client.service_is_ready():
+            if not self._warned_frs_unavailable:
+                self.get_logger().warn('FRS service /obstacles/get_frs not available yet.')
+                self._warned_frs_unavailable = True
+            return list(self._latest_dynamic_obstacles)
+        self._warned_frs_unavailable = False
+
+        # If a request is in flight, check if it has completed and use i it.
+        if self._frs_future is not None:
+            if self._frs_future.done():
+                response = self._frs_future.result()
+                self._frs_future = None
+                if response is not None:
+                    self.frs_pub.publish(frs_to_msg(response))
+                    self._latest_dynamic_obstacles = frs_to_obstacle(response)
+            return list(self._latest_dynamic_obstacles)
+
+        # Else Send a new  request asyncly and return previously 'cached' obstacles.
+        request = GetFRS.Request()
+        request.t_list = (t_current + np.arange(self.planner.T) * self.planner.dt).tolist()
+        self._frs_future = self.frs_client.call_async(request)
+        return list(self._latest_dynamic_obstacles)
 
     def setup_service(self):
         '''
@@ -211,6 +254,10 @@ class TrajectoryPlanner(Node):
 
         #lab 3 Task 3 TBD
         # self.get_frs = rospy.ServiceProxy('/obstacles/get_frs', GetFRS)
+        self.frs_client = self.create_client(GetFRS, '/obstacles/get_frs')
+        self._warned_frs_unavailable = False
+        self._frs_future = None
+        self._latest_dynamic_obstacles = []
 
     def start_planning_cb(self, req, res):
         '''
@@ -460,6 +507,7 @@ class TrajectoryPlanner(Node):
             if self.path_buffer.new_data_available and self.planner_ready:
                 new_path = self.path_buffer.readFromRT()
                 self.planner.update_ref_path(new_path)
+                self.planner.update_obstacles(self._get_static_obstacles())
                 
                 # check if there is an existing policy
                 original_policy = self.policy_buffer.readFromRT()
@@ -569,21 +617,23 @@ class TrajectoryPlanner(Node):
                 else:
                     u_init = None
 
-                
-                #---updates
-                obstacles_list = []
-                obstacles_list.extend(self.static_obstacle_dict.values())
-
-                # frs = self.get_frs()
-                # response = frs.
-                
-                self.planner.update_obstacles(obstacles_list)
-
                 # Check if there is a new path
                 if self.path_buffer.new_data_available:
                     new_path = self.path_buffer.readFromRT()
                     self.planner.update_ref_path(new_path)
 
+                # plan when path is recieved
+                if self.planner.ref_path is None:
+                    continue
+                #---updates
+                obstacles_list = self._get_static_obstacles()
+                # obstacles_list.extend(self.static_obstacle_dict.values())
+
+                obstacles_list.extend(self._get_dynamic_obstacles(t_current))
+                
+                self.planner.update_obstacles(obstacles_list)
+
+                
                 # Replan using ILQR
                 new_plan = self.planner.plan(state[:-1], u_init)
 
