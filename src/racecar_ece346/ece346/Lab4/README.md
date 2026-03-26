@@ -1,5 +1,5 @@
 # Lab 4: MDP and POMDP
-**[Due 11:59PM Thursday, April 3]**
+**[Due 11:59PM Friday, April 3]**
 
 This lab will focus on using **Markov Decision Processes (MDPs)** and **Partially Observable Markov Decision Processes (POMDPs)** in solving robot planning problems. In doing so, it helps us practice with the following:
 * Modeling a real-world example of T-intersection negotiation using MDPs and reward functions
