@@ -9,7 +9,7 @@ This lab will focus on using **Markov Decision Processes (MDPs)** and **Partiall
 
 **Note**: Please make sure you have **pulled the code from upstream** into your repository and **updated all submodules**:
 ```bash
-git pull upstream SP2025 --recurse-submodules
+git pull upstream SP2026 --recurse-submodules
 ```
 
 Rebuild and start the Docker container:
