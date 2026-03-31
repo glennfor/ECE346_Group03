@@ -37,8 +37,8 @@ class MDP():
             self.num_s = self.num_s * len(self.s[i])
         self.num_a = len(self.a)
         # transition function
-        # P[new_state, current_state, action] = probability
-        self.P = np.zeros((self.num_s, self.num_s, self.num_a))
+        # P[action, current_state, new_state] = probability
+        self.P = np.zeros((self.num_a, self.num_s, self.num_s))
 
         # reward function
         self.R = r * np.ones((self.num_s, self.num_a))
@@ -56,14 +56,14 @@ class MDP():
         # get correct index of MDP action from input action
         action_index = self.a.index(action)
 
-        if self.P[self.get_index(new_state), self.get_index(current_state), action_index] > 0.0:
-            # print("Warning: Already have prop value of {}. Use {} to deal with".format(self.P[self.get_index(new_state), self.get_index(current_state), action_index], self.method))
+        if self.P[action_index, self.get_index(current_state), self.get_index(new_state)] > 0.0:
+            # print("Warning: Already have prop value of {}. Use {} to deal with".format(self.P[action_index, self.get_index(current_state), self.get_index(new_state)], self.method))
             if self.method == "replace":
-                self.P[self.get_index(new_state), self.get_index(current_state), action_index] = p
+                self.P[action_index, self.get_index(current_state), self.get_index(new_state)] = p
             else:
-                self.P[self.get_index(new_state), self.get_index(current_state), action_index] += p
+                self.P[action_index, self.get_index(current_state), self.get_index(new_state)] += p
         else:
-            self.P[self.get_index(new_state), self.get_index(current_state), action_index] = p
+            self.P[action_index, self.get_index(current_state), self.get_index(new_state)] = p
 
     def add_reward(self, state, action, reward):
         self.R[self.get_index(state), self.a.index(action)] = reward
