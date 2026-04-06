@@ -1,0 +1,27 @@
+bc_eval_node:
+  ros__parameters:
+    odom_topic: /SLAM/Pose
+    drive_topic: /drive
+    model_path: "/ros2_ws/src/racecar_ece346/ece346/Lab5/models/bc_model.pt"
+    norm_path: "/ros2_ws/src/racecar_ece346/ece346/Lab5/models/normalization.pkl"
+    control_rate: 20.0
+    max_speed: 0.4
+    max_steering: 0.34
+    input_size: 6
+    hidden_sizes: [64, 128, 128, 64]
+
+routing_node:
+  ros__parameters:
+    odom_topic: /SLAM/Pose
+    lane_change_cost: 1.0
+    goal_with_heading: False
+    clicked_goal: True
+    routing_path_topic: /Routing/Path
+    routing_pathL_topic: /Routing/PathL
+    routing_pathR_topic: /Routing/PathR
+    goal_topic: /goal_pose
+
+visualization_node:
+  ros__parameters:
+    odom_topic: /SLAM/Pose
+    dyn_obs_topic: Obstacles/Dynamic

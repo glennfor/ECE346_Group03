@@ -1,0 +1,21 @@
+data_recorder_node:
+  ros__parameters:
+    odom_topic: /SLAM/Pose
+    control_topic: /teleop
+    # save_dir: ""  # defaults to Lab5/data/
+
+routing_node:
+  ros__parameters:
+    odom_topic: /SLAM/Pose
+    lane_change_cost: 1.0
+    goal_with_heading: False
+    clicked_goal: True
+    routing_path_topic: /Routing/Path
+    routing_pathL_topic: /Routing/PathL
+    routing_pathR_topic: /Routing/PathR
+    goal_topic: /goal_pose
+
+visualization_node:
+  ros__parameters:
+    odom_topic: /SLAM/Pose
+    dyn_obs_topic: Obstacles/Dynamic

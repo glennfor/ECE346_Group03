@@ -39,6 +39,8 @@ install(PROGRAMS
   ece346/lab1_truck/scripts/lab1_truck_planning_node.py
   ece346/Lab3/scripts/Lab3_traj_planning_node.py
   ece346/Lab3/scripts/dyn_obs_node.py
+  ece346/Lab5/scripts/data_recorder_node.py
+  ece346/Lab5/scripts/bc_eval_node.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -51,6 +53,7 @@ install(DIRECTORY
   ece346/Lab1/config
   ece346/lab1_truck/config
   ece346/Lab3/config
+  ece346/Lab5/config
   DESTINATION share/${PROJECT_NAME}
 )
 
@@ -61,6 +64,7 @@ install(DIRECTORY
   ece346/Lab1/launch
   ece346/lab1_truck/launch
   ece346/Lab3/launch
+  ece346/Lab5/launch
   DESTINATION share/${PROJECT_NAME}
 )
 

@@ -74,6 +74,9 @@ RUN python3 -m pip install --no-cache-dir -r /tmp/requirements.txt
 RUN python3 -m pip install --no-cache-dir jax==0.4.13 jaxlib==0.4.13 \
     -f https://storage.googleapis.com/jax-releases/jax_releases.html
 
+# ---------- PyTorch (CPU) for Lab5 behavioral cloning ----------
+RUN python3 -m pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+
 # ---------- hppfcl (collision checking) – build from source ----------
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libeigen3-dev libboost-dev libboost-serialization-dev \
