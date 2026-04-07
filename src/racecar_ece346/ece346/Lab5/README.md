@@ -152,7 +152,7 @@ Your training data will likely contain far more straight-driving samples than tu
 
 The key parameter is `turn_weight` in the train/val split cell:
 ```python
-turn_weight = 5.0  # how much more to weight turns vs straight
+turn_weight = 1.0  # how much more to weight turns vs straight
 ```
 Higher values = more emphasis on turns. If your truck understeers, try increasing this.
 
@@ -161,7 +161,7 @@ Higher values = more emphasis on turns. If your truck understeers, try increasin
 | Parameter | Cell | What it does |
 |-----------|------|-------------|
 | `feature_indices` | Prepare Features | Which state features to use as input (default: all 6) |
-| `turn_weight` | Train/Val Split | How much more to weight turning samples (default: 5.0) |
+| `turn_weight` | Train/Val Split | How much more to weight turning samples (default: 1.0) |
 | `hidden_sizes` | Train Model | Network layer sizes — change this in your `neural_network.py` |
 | `learning_rate` | Train Model | Optimizer step size (default: 1e-3) |
 | `n_epochs` | Train Model | Number of training passes (default: 75) |
