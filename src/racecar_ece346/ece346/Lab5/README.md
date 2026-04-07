@@ -79,6 +79,7 @@ In this task, you will drive the truck manually and record training data.
 On your host computer, inside the Docker container:
 ```bash
 cd /ros2_ws && colcon build --symlink-install && source install/setup.bash
+source setup_cyclone.sh <TRUCK_ID> <ROS_DOMAIN>
 ros2 launch racecar_ece346 lab5_record_launch.py
 ```
 
