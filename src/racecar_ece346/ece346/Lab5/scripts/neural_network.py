@@ -46,7 +46,10 @@ class BCNetwork(nn.Module):
         # TODO: Define your optimizer and loss function.
         # Example:
         #   self.optimizer = torch.optim.Adam(self.parameters(), lr=lr)
-        #   self.loss_fn = nn.MSELoss()
+        
+        # Feel free to define or utilize other loss functions
+        # https://docs.pytorch.org/docs/stable/nn.html#loss-functions
+        #   self.loss_fn = nn.MSELoss() 
 
         raise NotImplementedError("TODO: Define your optimizer and loss function")
 
