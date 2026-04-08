@@ -191,6 +191,7 @@ bc_eval_node:
 
 ```bash
 cd /ros2_ws && colcon build --symlink-install && source install/setup.bash
+source setup_cyclone.sh <TRUCK_IP> <ROS_DOMAIN>
 ros2 launch racecar_ece346 lab5_eval_launch.py
 ```
 
