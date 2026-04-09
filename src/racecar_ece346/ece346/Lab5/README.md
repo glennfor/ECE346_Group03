@@ -87,6 +87,7 @@ ros2 launch racecar_ece346 lab5_record_launch.py
 
 In a separate terminal, arm the recorder:
 ```bash
+source setup_cyclone.sh <TRUCK_ID> <ROS_DOMAIN>
 ros2 service call /learning/start_record std_srvs/srv/Empty
 ```
 
