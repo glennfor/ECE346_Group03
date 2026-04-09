@@ -1,6 +1,6 @@
 # Lab 5: Behavioral Cloning
 
-**[Due 11:59PM Friday, April 10]**
+**[Due 11:59PM Friday, April 17]**
 
 In this lab, we will explore **behavioral cloning** (BC), a form of imitation learning where we train a neural network to mimic human driving. You will manually drive the truck using a joystick, record state-action pairs, train a policy network offline, and deploy it to drive the truck autonomously.
 
