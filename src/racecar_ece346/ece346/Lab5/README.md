@@ -32,7 +32,7 @@ where $w_i$ are optional per-sample weights. The policy is a multi-layer percept
 This lab introduces two new ROS 2 nodes:
 
 - **`data_recorder_node`** — Subscribes to `/SLAM/Pose` (odometry) and `/teleop` (joystick commands). Records synchronized state-action pairs and saves them to `.pkl` files.
-- **`bc_eval_node`** — Loads a trained PyTorch model and publishes `AckermannDriveStamped` commands to `/drive`. The truck's `control_gate` forwards these commands when R2 is held on the joystick.
+- **`bc_eval_node`** — Loads a trained PyTorch model and publishes `AckermannDriveStamped` commands to `/drive`. The truck's `control_gate` forwards these commands when R1 is held on the joystick.
 
 ### State Vector (6D)
 | Index | Name     | Description              |
