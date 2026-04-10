@@ -201,7 +201,7 @@ In a separate terminal:
 ros2 service call /learning/start_eval std_srvs/srv/Empty
 ```
 
-**Hold R2** on the joystick to enable autonomous driving. Release R2 at any time to stop the truck immediately.
+**Hold R1** on the joystick to enable autonomous driving. Release R1 at any time to stop the truck immediately.
 
 To stop the model:
 ```bash
@@ -211,8 +211,8 @@ ros2 service call /learning/stop_eval std_srvs/srv/Empty
 ### Safety
 
 The `control_gate` on the truck ensures safety:
-- **R2 held** — autonomous commands are forwarded to the motors
-- **R2 released** — truck stops immediately (zero velocity)
+- **R1 held** — autonomous commands are forwarded to the motors
+- **R1 released** — truck stops immediately (zero velocity)
 - **L2 held** — manual override (teleop mode)
 - **Both or neither** — truck stops
 
