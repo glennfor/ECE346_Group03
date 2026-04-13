@@ -32,11 +32,11 @@ class Truckvis(Node):
 
 
         #subscribers
-        self.pose_sub = self.create_subscription(Odometry, self.odom_topic, self.odometry_callback, 1)
+        self.pose_sub = self.create_subscription(Odometry, self.odom_topic, self.odometry_callback, 10)
         self.dyn_obs_sub = self.create_subscription(OdometryArray, self.dyn_obs_topic, self.dyn_obs_callback, 1)
 
         #publishers
-        self.car_pub = self.create_publisher(MarkerArray, 'vis/truck', 1)
+        self.car_pub = self.create_publisher(MarkerArray, 'vis/truck', 10)
         self.origin_pub = self.create_publisher(PoseStamped, 'vis/origin', 1)
         self.playground_pub = self.create_publisher(Marker, 'vis/playground', 1)
         self.dyn_obs_pub = self.create_publisher(MarkerArray, '/vis/dyn_obs', 1)
