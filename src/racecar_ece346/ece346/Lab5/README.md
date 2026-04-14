@@ -75,6 +75,10 @@ This lab runs on the **real truck**, not in simulation. Before launching any nod
 In this task, you will drive the truck manually and record training data.
 
 ### Launching the Recorder
+Outside the Docker container, rebuikd:
+```
+./start.sh build
+```
 
 On your host computer, inside the Docker container:
 ```bash
