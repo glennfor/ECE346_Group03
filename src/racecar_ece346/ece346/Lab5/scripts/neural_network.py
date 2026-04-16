@@ -40,8 +40,16 @@ class BCNetwork(nn.Module):
         #       ...
         #       nn.Linear(??, output_size),
         #   )
+        if hidden_sizes is None:
+            hidden_sizes = [64, 128, 128, 64]
 
-        raise NotImplementedError("TODO: Define your network architecture")
+        layer_sizes = [input_size, *hidden_sizes, output_size]
+        layers = []
+        for i in range(len(layer_sizes) - 1):
+            layers.append(nn.Linear(layer_sizes[i], layer_sizes[i + 1]))
+            if i < len(layer_sizes) - 2:
+                layers.append(nn.ReLU())
+        self.network = nn.Sequential(*layers)
 
         # TODO: Define your optimizer and loss function.
         # Example:
@@ -50,8 +58,8 @@ class BCNetwork(nn.Module):
         # Feel free to define or utilize other loss functions
         # https://docs.pytorch.org/docs/stable/nn.html#loss-functions
         #   self.loss_fn = nn.MSELoss() 
-
-        raise NotImplementedError("TODO: Define your optimizer and loss function")
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=lr)
+        self.loss_fn = nn.MSELoss()
 
     def forward(self, x):
         """
@@ -64,7 +72,7 @@ class BCNetwork(nn.Module):
             output tensor (N, output_size)
         """
         # TODO: Pass x through your network and return the output.
-        raise NotImplementedError("TODO: Implement forward pass")
+        return self.network(x)
 
     def train_step(self, x: np.ndarray, y: np.ndarray, w: np.ndarray = None) -> float:
         """
@@ -86,7 +94,31 @@ class BCNetwork(nn.Module):
             4. Zero gradients, backprop, optimizer step
             5. Return loss.item()
         """
-        raise NotImplementedError("TODO: Implement training step")
+        self.train()
+
+        x_t = torch.FloatTensor(x)
+        y_t = torch.FloatTensor(y)
+
+        if x_t.ndim == 1:
+            x_t = x_t.unsqueeze(0)
+        if y_t.ndim == 1:
+            y_t = y_t.unsqueeze(0)
+
+        pred_t = self.forward(x_t)
+
+        if w is None:
+            loss = self.loss_fn(pred_t, y_t)
+        else:
+            w_t = torch.FloatTensor(w)
+            if w_t.ndim == 1:
+                w_t = w_t.unsqueeze(1)
+            loss = torch.mean(w_t * (pred_t - y_t) ** 2)
+
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
+
+        return loss.item()
 
     @torch.no_grad()
     def predict(self, x: np.ndarray) -> np.ndarray:
