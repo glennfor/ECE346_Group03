@@ -41,6 +41,7 @@ class SafetyFilterParams:
     hysteresis_cycles: int = 5
     passthrough_tolerance: float = 1e-3
     stale_timeout_s: float = 0.25
+    recovery_h_improvement: float = 1e-3
 
     command_mode: str = "servo"
     odom_topic: str = "/slam_pose"

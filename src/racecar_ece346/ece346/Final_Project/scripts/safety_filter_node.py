@@ -124,6 +124,7 @@ class SafetyFilterNode(Node):
         self.grad_pub = self.create_publisher(Float64MultiArray, "/safety/grad", 1)
         self.override_pub = self.create_publisher(Bool, "/safety/override", 1)
         self.binding_pub = self.create_publisher(String, "/safety/binding_constraint", 1)
+        self.status_pub = self.create_publisher(String, "/safety/status", 1)
         self.margins_pub = self.create_publisher(Float64MultiArray, "/safety/margins", 1)
         self.u_human_pub = self.create_publisher(Float64MultiArray, "/safety/u_human", 1)
         self.u_filtered_pub = self.create_publisher(Float64MultiArray, "/safety/u_filtered", 1)
@@ -189,6 +190,7 @@ class SafetyFilterNode(Node):
         u_human: np.ndarray,
         u_filtered: np.ndarray,
         override: bool,
+        status: str,
     ):
         value_msg = Float32()
         value_msg.data = float(result.value)
@@ -205,6 +207,10 @@ class SafetyFilterNode(Node):
         binding_msg = String()
         binding_msg.data = result.binding_constraint
         self.binding_pub.publish(binding_msg)
+
+        status_msg = String()
+        status_msg.data = status
+        self.status_pub.publish(status_msg)
 
         margins_msg = Float64MultiArray()
         margins_msg.data = [
@@ -263,6 +269,9 @@ class SafetyFilterNode(Node):
                 u_filtered = brake_and_recenter(state, self.lane_context, self.params)
                 status = "fallback_stale"
             else:
+                u_backup = brake_and_recenter(state, self.lane_context, self.params)
+                h_human_next = self._next_barrier_value(state, u_human, ctx)
+
                 f_human = step(state, u_human, self.params)
                 g = control_jacobian(self.params).T @ result.gradient
                 c = (
@@ -274,14 +283,31 @@ class SafetyFilterNode(Node):
                 u_filtered = qp_result.control
                 status = qp_result.status
 
-                if status != "optimal":
-                    u_filtered = brake_and_recenter(state, self.lane_context, self.params)
+                if result.value < 0.0 and h_human_next > result.value + self.params.recovery_h_improvement:
+                    u_filtered = u_human
+                    status = "recovery_human_improves_h"
+                elif status != "optimal":
+                    u_filtered, status = self._best_recovery_control(
+                        state,
+                        ctx,
+                        [
+                            (u_backup, "fallback_qp_infeasible"),
+                            (u_human, "recovery_human"),
+                        ],
+                    )
                 elif self.params.exact_safety_check:
-                    h_next, _, _, _ = implicit_barrier_value(step(state, u_filtered, self.params), ctx)
+                    h_next = self._next_barrier_value(state, u_filtered, ctx)
                     threshold = (1.0 - self.params.lambda_cbf) * result.value
                     if h_next < threshold - 1e-6:
-                        u_filtered = brake_and_recenter(state, self.lane_context, self.params)
-                        status = "fallback_exact_check"
+                        u_filtered, status = self._best_recovery_control(
+                            state,
+                            ctx,
+                            [
+                                (u_backup, "fallback_exact_check"),
+                                (u_filtered, "qp_exact_best_effort"),
+                                (u_human, "recovery_human"),
+                            ],
+                        )
 
             deviates = np.linalg.norm(u_filtered - u_human, ord=np.inf) > self.params.passthrough_tolerance
             if deviates:
@@ -292,12 +318,24 @@ class SafetyFilterNode(Node):
 
             override = deviates or self.override_hold > 0 or status.startswith("fallback")
             self._publish_command(u_filtered, state)
-            self._publish_debug(result, component_margins, u_human, u_filtered, override)
+            self._publish_debug(result, component_margins, u_human, u_filtered, override, status)
 
         except Exception:
             self.get_logger().error(f"safety filter fault:\n{traceback.format_exc()}")
             u_backup = brake_and_recenter(state, self.lane_context, self.params)
             self._publish_command(u_backup, state)
+
+    def _next_barrier_value(self, state: np.ndarray, control: np.ndarray, ctx: MarginContext) -> float:
+        h_next, _, _, _ = implicit_barrier_value(step(state, control, self.params), ctx)
+        return float(h_next)
+
+    def _best_recovery_control(self, state: np.ndarray, ctx: MarginContext, candidates: list) -> tuple:
+        scored = [
+            (self._next_barrier_value(state, control, ctx), control, label)
+            for control, label in candidates
+        ]
+        _, control, label = max(scored, key=lambda item: item[0])
+        return control, label
 
 
 def main(args=None):

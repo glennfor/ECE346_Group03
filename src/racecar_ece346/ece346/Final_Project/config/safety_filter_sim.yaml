@@ -41,6 +41,7 @@ safety_filter_node:
     hysteresis_cycles: 5
     passthrough_tolerance: 0.001
     stale_timeout_s: 0.5
+    recovery_h_improvement: 0.001
     lane_change_cost: 1.0
     lane_context_rebuild_distance_m: 0.25
     lane_context_rebuild_yaw_rad: 0.35
