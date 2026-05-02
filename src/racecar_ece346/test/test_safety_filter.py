@@ -1,6 +1,7 @@
 import numpy as np
 
 from ece346.Final_Project.safety_filter.barrier import implicit_barrier_value
+from ece346.Final_Project.safety_filter.backup_policy import lane_recovery_control
 from ece346.Final_Project.safety_filter.config import SafetyFilterParams
 from ece346.Final_Project.safety_filter.dynamics import step
 from ece346.Final_Project.safety_filter.lane_context import LaneContext, LaneletContextBuilder
@@ -95,6 +96,17 @@ def test_kinematic_margin_allows_stopped_car():
     x_stopped = np.array([0.0, 0.0, 0.0, 0.0, 0.0])
 
     assert margin_kinematic(x_stopped, params) > 0.0
+
+
+def test_lane_recovery_moves_slowly_toward_centerline():
+    params = make_params()
+    lane = make_lane()
+    x_left_of_lane = np.array([0.0, 0.45, 0.0, 0.0, 0.0])
+
+    control = lane_recovery_control(x_left_of_lane, lane, params)
+
+    assert control[0] > 0.0
+    assert control[1] < 0.0
 
 
 def test_barrier_detects_close_obstacle():

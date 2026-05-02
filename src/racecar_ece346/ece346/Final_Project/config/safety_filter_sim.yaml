@@ -26,6 +26,9 @@ safety_filter_node:
     r_safe_obs: 0.05
     r_safe_traf: 0.10
     r_safe_kin: 0.0
+    lane_guard_margin_m: 0.06
+    lane_recovery_speed_mps: 0.25
+    lane_recovery_accel_gain: 4.0
     obstacle_radius_default: 0.14
     obstacle_memory_ttl_s: 1.0
     obstacle_memory_growth: 0.5

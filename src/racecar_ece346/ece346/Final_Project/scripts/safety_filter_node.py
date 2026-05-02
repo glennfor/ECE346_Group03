@@ -9,7 +9,10 @@ from rclpy.node import Node
 from std_msgs.msg import Bool, Float32, Float64MultiArray, String
 from visualization_msgs.msg import MarkerArray
 
-from ece346.Final_Project.safety_filter.backup_policy import brake_and_recenter
+from ece346.Final_Project.safety_filter.backup_policy import (
+    brake_and_recenter,
+    lane_recovery_control,
+)
 from ece346.Final_Project.safety_filter.barrier import evaluate_barrier, implicit_barrier_value
 from ece346.Final_Project.safety_filter.config import declare_and_load
 from ece346.Final_Project.safety_filter.dynamics import control_jacobian, step
@@ -268,6 +271,9 @@ class SafetyFilterNode(Node):
             if odom_stale or human_stale:
                 u_filtered = brake_and_recenter(state, self.lane_context, self.params)
                 status = "fallback_stale"
+            elif component_margins["lane"] < self.params.lane_guard_margin_m:
+                u_filtered = lane_recovery_control(state, self.lane_context, self.params)
+                status = "lane_guard_recenter"
             else:
                 u_backup = brake_and_recenter(state, self.lane_context, self.params)
                 h_human_next = self._next_barrier_value(state, u_human, ctx)
