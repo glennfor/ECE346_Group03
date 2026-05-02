@@ -272,7 +272,7 @@ class SafetyFilterNode(Node):
                 u_filtered = brake_and_recenter(state, self.lane_context, self.params)
                 status = "fallback_stale"
             elif component_margins["lane"] < self.params.lane_guard_margin_m:
-                u_filtered = lane_recovery_control(state, self.lane_context, self.params)
+                u_filtered = lane_recovery_control(state, self.lane_context, self.params, u_human)
                 status = "lane_guard_recenter"
             else:
                 u_backup = brake_and_recenter(state, self.lane_context, self.params)

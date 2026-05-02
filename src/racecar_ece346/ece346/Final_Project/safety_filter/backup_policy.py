@@ -9,9 +9,18 @@ def brake_and_recenter(x: np.ndarray, lane: LaneContext, params: SafetyFilterPar
     return recenter_control(x, lane, params, params.a_min)
 
 
-def lane_recovery_control(x: np.ndarray, lane: LaneContext, params: SafetyFilterParams) -> np.ndarray:
+def lane_recovery_control(
+    x: np.ndarray,
+    lane: LaneContext,
+    params: SafetyFilterParams,
+    u_human: np.ndarray = None,
+) -> np.ndarray:
     _, _, v, _, _ = x
-    accel = params.lane_recovery_accel_gain * (params.lane_recovery_speed_mps - v)
+    human_accel = 0.0 if u_human is None else float(u_human[0])
+    speed_limit_accel = params.lane_recovery_accel_gain * (params.lane_recovery_speed_mps - v)
+    accel = min(human_accel, speed_limit_accel)
+    if v <= 0.02 and human_accel <= 0.0:
+        accel = 0.0
     return recenter_control(x, lane, params, accel)
 
 

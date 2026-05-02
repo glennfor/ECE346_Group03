@@ -103,9 +103,20 @@ def test_lane_recovery_moves_slowly_toward_centerline():
     lane = make_lane()
     x_left_of_lane = np.array([0.0, 0.45, 0.0, 0.0, 0.0])
 
-    control = lane_recovery_control(x_left_of_lane, lane, params)
+    control = lane_recovery_control(x_left_of_lane, lane, params, np.array([0.5, 0.0]))
 
     assert control[0] > 0.0
+    assert control[1] < 0.0
+
+
+def test_lane_recovery_does_not_accelerate_without_human_input():
+    params = make_params()
+    lane = make_lane()
+    x_left_of_lane = np.array([0.0, 0.45, 0.0, 0.0, 0.0])
+
+    control = lane_recovery_control(x_left_of_lane, lane, params, np.array([0.0, 0.0]))
+
+    assert control[0] == 0.0
     assert control[1] < 0.0
 
 
