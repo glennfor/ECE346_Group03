@@ -15,7 +15,7 @@ class JoyToServoNode(Node):
         self.declare_parameter("publish_rate_hz", 30.0)
         self.declare_parameter("throttle_axis", 1)
         self.declare_parameter("steer_axis", 0)
-        self.declare_parameter("deadman_button", -1)
+        self.declare_parameter("deadman_button", 4)
         self.declare_parameter("throttle_scale", 1.0)
         self.declare_parameter("steer_scale", 0.35)
         self.declare_parameter("throttle_offset", 0.0)

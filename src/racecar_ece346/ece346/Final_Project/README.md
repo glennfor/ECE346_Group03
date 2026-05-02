@@ -40,9 +40,29 @@ ros2 run joy joy_node
 ```
 
 The launch file starts `joy_to_servo_node.py`, which maps `/joy` to
-`/human_control`. If the axes are flipped or mapped differently on your
-controller, tune `throttle_axis`, `steer_axis`, `invert_throttle`, and
-`invert_steer` in `config/safety_filter_sim.yaml`.
+`/human_control`. The default config requires holding joystick button index `4`
+as a deadman before stick input is forwarded. If your controller maps buttons or
+axes differently, run `ros2 topic echo /joy` and tune `deadman_button`,
+`throttle_axis`, `steer_axis`, `invert_throttle`, and `invert_steer` in
+`config/safety_filter_sim.yaml`.
+
+The Docker container must see Linux input devices for `joy_node` to work. After
+starting the container, verify:
+
+```bash
+ls /dev/input
+ros2 topic echo /joy
+```
+
+If `/dev/input` is missing in the container, restart with `./start.sh down` and
+`./start.sh`; `docker-compose.yml` passes `/dev/input` through for controller
+access.
+
+With no controller input, `/control` may show the safety filter publishing max
+brake (`throttle: -5.0`) because the human command is stale. That is expected
+and should not command forward motion. Use `/slam_pose` to confirm whether the
+ego car is moving; `traffic_simulation_node` can also create moving obstacle
+cars that are independent of ego control.
 
 Real truck:
 

@@ -50,7 +50,7 @@ joy_to_servo_node:
     publish_rate_hz: 30.0
     throttle_axis: 1
     steer_axis: 0
-    deadman_button: -1
+    deadman_button: 4
     throttle_scale: 1.0
     steer_scale: 0.35
     throttle_offset: 0.0
