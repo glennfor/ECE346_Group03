@@ -10,7 +10,7 @@ def brake_and_recenter(x: np.ndarray, lane: LaneContext, params: SafetyFilterPar
     _, _, v, _, delta = x
 
     delta_des = np.clip(
-        delta_psi + np.arctan2(params.K_e * sample.signed_lateral_error, abs(v) + params.v_eps),
+        delta_psi - np.arctan2(params.K_e * sample.signed_lateral_error, abs(v) + params.v_eps),
         params.delta_min,
         params.delta_max,
     )

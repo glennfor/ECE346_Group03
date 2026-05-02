@@ -56,12 +56,11 @@ def margin_obstacle(
 def margin_kinematic(x: np.ndarray, params: SafetyFilterParams) -> float:
     _, _, v, _, delta = x
     values = [
-        delta - params.delta_min,
-        params.delta_max - delta,
-        v - params.v_min,
-        params.v_max - v,
+        delta - params.delta_min - params.r_safe_kin,
+        params.delta_max - delta - params.r_safe_kin,
+        params.v_max - v - params.r_safe_kin,
     ]
-    return float(min(values) - params.r_safe_kin)
+    return float(min(values))
 
 
 def margin_total(x: np.ndarray, ctx: MarginContext) -> Tuple[float, str]:

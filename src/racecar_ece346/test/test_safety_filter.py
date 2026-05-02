@@ -6,6 +6,7 @@ from ece346.Final_Project.safety_filter.dynamics import step
 from ece346.Final_Project.safety_filter.lane_context import LaneContext
 from ece346.Final_Project.safety_filter.margins import (
     MarginContext,
+    margin_kinematic,
     margin_lane,
     margin_obstacle,
 )
@@ -61,6 +62,22 @@ def test_lane_and_obstacle_margins():
     obs = Obstacle(1, np.array([contact_distance, 0.0]), 0.1)
     assert abs(margin_obstacle(x_center, [obs], params)) < 1e-9
     assert margin_obstacle(x_center, [], params) == 100.0
+
+
+def test_lane_query_uses_segment_projection():
+    centerline = np.array([[0.0, 0.0], [10.0, 0.0]])
+    lane = LaneContext.from_centerline(centerline, np.array([0.5, 0.5]), np.array([0.5, 0.5]))
+    sample = lane.query(5.0, 0.2)
+
+    assert np.allclose(sample.point, np.array([5.0, 0.0]))
+    assert sample.signed_lateral_error > 0.0
+
+
+def test_kinematic_margin_allows_stopped_car():
+    params = make_params()
+    x_stopped = np.array([0.0, 0.0, 0.0, 0.0, 0.0])
+
+    assert margin_kinematic(x_stopped, params) > 0.0
 
 
 def test_barrier_detects_close_obstacle():

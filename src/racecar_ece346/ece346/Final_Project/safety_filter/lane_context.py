@@ -51,9 +51,7 @@ class LaneContext:
 
     def query(self, px: float, py: float) -> LaneSample:
         p = np.array([px, py], dtype=float)
-        idx = int(np.argmin(np.linalg.norm(self.centerline - p, axis=1)))
-        center = self.centerline[idx]
-        tangent = float(self.tangent[idx])
+        center, tangent, idx = self._project_to_centerline(p)
         tangent_vec = np.array([np.cos(tangent), np.sin(tangent)])
         left_normal = np.array([-tangent_vec[1], tangent_vec[0]])
         signed_lateral_error = float(np.dot(p - center, left_normal))
@@ -65,6 +63,23 @@ class LaneContext:
             width_left=float(self.width_left[idx]),
             width_right=float(self.width_right[idx]),
         )
+
+    def _project_to_centerline(self, p: np.ndarray) -> Tuple[np.ndarray, float, int]:
+        segments = self.centerline[1:] - self.centerline[:-1]
+        seg_len_sq = np.sum(segments * segments, axis=1)
+        seg_len_sq = np.where(seg_len_sq < 1e-12, 1e-12, seg_len_sq)
+
+        rel = p - self.centerline[:-1]
+        t = np.sum(rel * segments, axis=1) / seg_len_sq
+        t = np.clip(t, 0.0, 1.0)
+        projections = self.centerline[:-1] + t[:, None] * segments
+        distances = np.linalg.norm(projections - p, axis=1)
+        seg_idx = int(np.argmin(distances))
+
+        projected = projections[seg_idx]
+        tangent = float(np.arctan2(segments[seg_idx, 1], segments[seg_idx, 0]))
+        width_idx = seg_idx if t[seg_idx] < 0.5 else min(seg_idx + 1, len(self.centerline) - 1)
+        return projected, tangent, width_idx
 
 
 class LaneletContextBuilder:
@@ -91,7 +106,7 @@ class LaneletContextBuilder:
         start_s = getattr(arc, "length", 0.0) / max(wrapper.get_lanelet_length(lanelet), 1e-6)
         routes = wrapper.get_reachable_path(lanelet, start_s, distance_m, allow_lane_change=True)
 
-        centerline = routes[0] if routes else np.array([[pose[0], pose[1]], [pose[0] + 1.0, pose[1]]])
+        centerline = self._select_route(routes, pose)
         width_left = []
         width_right = []
         for x, y in centerline:
@@ -102,6 +117,24 @@ class LaneletContextBuilder:
             width_right.append(right)
 
         return LaneContext.from_centerline(centerline, np.array(width_left), np.array(width_right))
+
+    @staticmethod
+    def _select_route(routes, pose: np.ndarray) -> np.ndarray:
+        if not routes:
+            return np.array([[pose[0], pose[1]], [pose[0] + 1.0, pose[1]]], dtype=float)
+
+        heading = float(pose[2]) if len(pose) >= 3 else 0.0
+
+        def route_score(route):
+            if len(route) < 2:
+                return float("inf")
+            segment = route[1] - route[0]
+            tangent = np.arctan2(segment[1], segment[0])
+            heading_error = abs(wrap_angle(tangent - heading))
+            start_distance = np.linalg.norm(route[0] - pose[:2])
+            return heading_error + 0.1 * start_distance
+
+        return np.asarray(min(routes, key=route_score), dtype=float)
 
 
 def heading_error_to_lane(x: np.ndarray, lane: LaneContext) -> Tuple[float, LaneSample]:
