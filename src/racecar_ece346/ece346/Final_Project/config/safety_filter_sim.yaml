@@ -13,20 +13,20 @@ safety_filter_node:
     truck_length_m: 0.40
     a_min: -5.0
     a_max: 5.0
-    omega_min: -3.0
-    omega_max: 3.0
+    omega_min: -6.0
+    omega_max: 6.0
     delta_min: -0.35
     delta_max: 0.35
     v_min: 0.0
-    v_max: 2.0
+    v_max: 5.0
 
     dt: 0.05
     horizon_H: 30
-    r_safe_lane: 0.05
+    r_safe_lane: 0.01
     r_safe_obs: 0.05
     r_safe_traf: 0.10
     r_safe_kin: 0.0
-    obstacle_radius_default: 0.12
+    obstacle_radius_default: 0.14
     obstacle_memory_ttl_s: 1.0
     obstacle_memory_growth: 0.5
 
@@ -42,6 +42,27 @@ safety_filter_node:
     passthrough_tolerance: 0.001
     stale_timeout_s: 0.5
     lane_change_cost: 1.0
+
+simulator_node:
+  ros__parameters:
+    control_topic: /control
+    odom_topic: /slam_pose
+    pub_rate: 30
+    init_x: 2.0
+    init_y: 0.3
+    init_yaw: 0.0
+    reset_service: /simulation/reset
+
+traffic_simulation_node:
+  ros__parameters:
+    ~num_dyn_obs: 1
+    ~num_static_obs: 1
+    ~static_obs_size: 0.2
+    static_obs_topic: /Obstacles/Static
+    dyn_obs_topic: /Obstacles/Dynamic
+    pub_rate: 30
+    static_obs_location: ''
+    reset_obstacle_service: /simulation/reset_static_obstacles
 
 joy_to_servo_node:
   ros__parameters:

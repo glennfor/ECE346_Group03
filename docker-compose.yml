@@ -48,8 +48,8 @@ services:
       - /dev/input:/dev/input
 
     # Lets the container read joystick devices without running fully privileged.
-    group_add:
-      - input
+    # group_add:
+    #   - input
 
 volumes:
   ros2_build:
