@@ -6,7 +6,7 @@ safety_filter_node:
     filtered_control_topic: /control
     static_obstacles_topic: /Obstacles/Static
     dynamic_obstacles_topic: /Obstacles/Dynamic
-    control_rate_hz: 20.0
+    control_rate_hz: 30.0
 
     wheelbase_m: 0.257
     truck_radius_m: 0.13
@@ -20,7 +20,7 @@ safety_filter_node:
     v_min: 0.0
     v_max: 5.0
 
-    dt: 0.05
+    dt: 0.0333333333
     horizon_H: 30
     r_safe_lane: 0.01
     r_safe_obs: 0.05
@@ -42,6 +42,8 @@ safety_filter_node:
     passthrough_tolerance: 0.001
     stale_timeout_s: 0.5
     lane_change_cost: 1.0
+    lane_context_rebuild_distance_m: 0.25
+    lane_context_rebuild_yaw_rad: 0.35
 
 simulator_node:
   ros__parameters:

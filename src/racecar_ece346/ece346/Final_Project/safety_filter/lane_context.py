@@ -100,13 +100,14 @@ class LaneletContextBuilder:
         self._wrapper = LaneletWrapper(self.map_file, self.node)
         return self._wrapper
 
-    def build_near(self, pose: np.ndarray, distance_m: float = 8.0) -> LaneContext:
+    def build_near(self, state: np.ndarray, distance_m: float = 8.0) -> LaneContext:
         wrapper = self._load_wrapper()
-        lanelet, arc = wrapper.get_closest_lanelet(pose[:3], check_psi=True)
+        lane_pose = self._state_to_lane_pose(state)
+        lanelet, arc = wrapper.get_closest_lanelet(lane_pose, check_psi=True)
         start_s = getattr(arc, "length", 0.0) / max(wrapper.get_lanelet_length(lanelet), 1e-6)
         routes = wrapper.get_reachable_path(lanelet, start_s, distance_m, allow_lane_change=True)
 
-        centerline = self._select_route(routes, pose)
+        centerline = self._select_route(routes, lane_pose)
         width_left = []
         width_right = []
         for x, y in centerline:
@@ -119,11 +120,17 @@ class LaneletContextBuilder:
         return LaneContext.from_centerline(centerline, np.array(width_left), np.array(width_right))
 
     @staticmethod
-    def _select_route(routes, pose: np.ndarray) -> np.ndarray:
-        if not routes:
-            return np.array([[pose[0], pose[1]], [pose[0] + 1.0, pose[1]]], dtype=float)
+    def _state_to_lane_pose(state: np.ndarray) -> np.ndarray:
+        if len(state) >= 4:
+            return np.array([state[0], state[1], state[3]], dtype=float)
+        return np.asarray(state[:3], dtype=float)
 
-        heading = float(pose[2]) if len(pose) >= 3 else 0.0
+    @staticmethod
+    def _select_route(routes, lane_pose: np.ndarray) -> np.ndarray:
+        if not routes:
+            return np.array([[lane_pose[0], lane_pose[1]], [lane_pose[0] + 1.0, lane_pose[1]]], dtype=float)
+
+        heading = float(lane_pose[2]) if len(lane_pose) >= 3 else 0.0
 
         def route_score(route):
             if len(route) < 2:
@@ -131,7 +138,7 @@ class LaneletContextBuilder:
             segment = route[1] - route[0]
             tangent = np.arctan2(segment[1], segment[0])
             heading_error = abs(wrap_angle(tangent - heading))
-            start_distance = np.linalg.norm(route[0] - pose[:2])
+            start_distance = np.linalg.norm(route[0] - lane_pose[:2])
             return heading_error + 0.1 * start_distance
 
         return np.asarray(min(routes, key=route_score), dtype=float)

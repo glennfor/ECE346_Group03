@@ -3,7 +3,7 @@ import numpy as np
 from ece346.Final_Project.safety_filter.barrier import implicit_barrier_value
 from ece346.Final_Project.safety_filter.config import SafetyFilterParams
 from ece346.Final_Project.safety_filter.dynamics import step
-from ece346.Final_Project.safety_filter.lane_context import LaneContext
+from ece346.Final_Project.safety_filter.lane_context import LaneContext, LaneletContextBuilder
 from ece346.Final_Project.safety_filter.margins import (
     MarginContext,
     margin_kinematic,
@@ -71,6 +71,23 @@ def test_lane_query_uses_segment_projection():
 
     assert np.allclose(sample.point, np.array([5.0, 0.0]))
     assert sample.signed_lateral_error > 0.0
+
+
+def test_lanelet_builder_extracts_yaw_from_full_state():
+    state = np.array([1.0, 2.0, 4.0, 1.25, 0.1])
+    lane_pose = LaneletContextBuilder._state_to_lane_pose(state)
+
+    assert np.allclose(lane_pose, np.array([1.0, 2.0, 1.25]))
+
+
+def test_route_selection_uses_yaw_not_speed():
+    east_route = np.array([[0.0, 0.0], [1.0, 0.0]])
+    north_route = np.array([[0.0, 0.0], [0.0, 1.0]])
+    lane_pose = np.array([0.0, 0.0, np.pi / 2.0])
+
+    selected = LaneletContextBuilder._select_route([east_route, north_route], lane_pose)
+
+    assert np.allclose(selected, north_route)
 
 
 def test_kinematic_margin_allows_stopped_car():

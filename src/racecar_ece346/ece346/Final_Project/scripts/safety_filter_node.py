@@ -14,7 +14,7 @@ from ece346.Final_Project.safety_filter.barrier import evaluate_barrier, implici
 from ece346.Final_Project.safety_filter.config import declare_and_load
 from ece346.Final_Project.safety_filter.dynamics import control_jacobian, step
 from ece346.Final_Project.safety_filter.lane_context import LaneContext, LaneletContextBuilder
-from ece346.Final_Project.safety_filter.margins import MarginContext
+from ece346.Final_Project.safety_filter.margins import MarginContext, margin_components
 from ece346.Final_Project.safety_filter.obstacle_memory import ObstacleMemory
 from ece346.Final_Project.safety_filter.qp import solve_box_halfspace_qp
 from ece346.Final_Project.safety_filter.ros_utils import (
@@ -51,6 +51,7 @@ class SafetyFilterNode(Node):
         self.last_human_msg = None
         self.last_human_time = None
         self.last_lane_center = None
+        self.last_lane_yaw = None
         self.lane_context = LaneContext.fallback_straight()
         self.lane_builder = LaneletContextBuilder(
             self.params.map_file,
@@ -123,6 +124,7 @@ class SafetyFilterNode(Node):
         self.grad_pub = self.create_publisher(Float64MultiArray, "/safety/grad", 1)
         self.override_pub = self.create_publisher(Bool, "/safety/override", 1)
         self.binding_pub = self.create_publisher(String, "/safety/binding_constraint", 1)
+        self.margins_pub = self.create_publisher(Float64MultiArray, "/safety/margins", 1)
         self.u_human_pub = self.create_publisher(Float64MultiArray, "/safety/u_human", 1)
         self.u_filtered_pub = self.create_publisher(Float64MultiArray, "/safety/u_filtered", 1)
         self.backup_path_pub = self.create_publisher(Path, "/safety/backup_traj", 1)
@@ -149,11 +151,17 @@ class SafetyFilterNode(Node):
     def _maybe_rebuild_lane_context(self, state: np.ndarray):
         p = state[:2]
         if self.last_lane_center is not None:
-            if np.linalg.norm(p - self.last_lane_center) < 1.0:
+            distance_delta = np.linalg.norm(p - self.last_lane_center)
+            yaw_delta = abs((state[3] - self.last_lane_yaw + np.pi) % (2.0 * np.pi) - np.pi)
+            if (
+                distance_delta < self.params.lane_context_rebuild_distance_m
+                and yaw_delta < self.params.lane_context_rebuild_yaw_rad
+            ):
                 return
         try:
             self.lane_context = self.lane_builder.build_near(state)
             self.last_lane_center = p.copy()
+            self.last_lane_yaw = float(state[3])
         except Exception as exc:
             self.get_logger().warn(f"lane context rebuild failed, using previous/fallback lane: {exc}")
 
@@ -174,7 +182,14 @@ class SafetyFilterNode(Node):
             self.delta_estimate = msg.steer
         self.command_pub.publish(msg)
 
-    def _publish_debug(self, result, u_human: np.ndarray, u_filtered: np.ndarray, override: bool):
+    def _publish_debug(
+        self,
+        result,
+        component_margins: dict,
+        u_human: np.ndarray,
+        u_filtered: np.ndarray,
+        override: bool,
+    ):
         value_msg = Float32()
         value_msg.data = float(result.value)
         self.value_pub.publish(value_msg)
@@ -190,6 +205,15 @@ class SafetyFilterNode(Node):
         binding_msg = String()
         binding_msg.data = result.binding_constraint
         self.binding_pub.publish(binding_msg)
+
+        margins_msg = Float64MultiArray()
+        margins_msg.data = [
+            float(component_margins["lane"]),
+            float(component_margins["obstacle"]),
+            float(component_margins["traffic"]),
+            float(component_margins["kinematic"]),
+        ]
+        self.margins_pub.publish(margins_msg)
 
         u_h_msg = Float64MultiArray()
         u_h_msg.data = [float(v) for v in u_human]
@@ -232,6 +256,7 @@ class SafetyFilterNode(Node):
 
         try:
             result = evaluate_barrier(state, ctx)
+            component_margins = margin_components(state, ctx)
             u_human = self._human_control(state)
 
             if odom_stale or human_stale:
@@ -267,7 +292,7 @@ class SafetyFilterNode(Node):
 
             override = deviates or self.override_hold > 0 or status.startswith("fallback")
             self._publish_command(u_filtered, state)
-            self._publish_debug(result, u_human, u_filtered, override)
+            self._publish_debug(result, component_margins, u_human, u_filtered, override)
 
         except Exception:
             self.get_logger().error(f"safety filter fault:\n{traceback.format_exc()}")

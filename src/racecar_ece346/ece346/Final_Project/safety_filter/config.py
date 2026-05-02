@@ -50,6 +50,8 @@ class SafetyFilterParams:
     dynamic_obstacles_topic: str = "/Obstacles/Dynamic"
     map_file: str = ""
     lane_change_cost: float = 1.0
+    lane_context_rebuild_distance_m: float = 0.25
+    lane_context_rebuild_yaw_rad: float = 0.35
     publish_debug: bool = True
 
 

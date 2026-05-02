@@ -64,12 +64,16 @@ def margin_kinematic(x: np.ndarray, params: SafetyFilterParams) -> float:
 
 
 def margin_total(x: np.ndarray, ctx: MarginContext) -> Tuple[float, str]:
-    components = {
+    components = margin_components(x, ctx)
+    label = min(components, key=components.get)
+    return float(components[label]), label
+
+
+def margin_components(x: np.ndarray, ctx: MarginContext) -> dict:
+    return {
         "lane": margin_lane(x, ctx.lane, ctx.params),
         "obstacle": margin_obstacle(x, ctx.obstacles, ctx.params),
         "traffic": margin_obstacle(x, ctx.traffic, ctx.params, ctx.params.r_safe_traf),
         "kinematic": margin_kinematic(x, ctx.params),
     }
-    label = min(components, key=components.get)
-    return float(components[label]), label
 
