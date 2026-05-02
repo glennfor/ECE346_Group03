@@ -1,0 +1,66 @@
+safety_filter_node:
+  ros__parameters:
+    command_mode: servo
+    odom_topic: /slam_pose
+    human_control_topic: /human_control
+    filtered_control_topic: /control
+    static_obstacles_topic: /Obstacles/Static
+    dynamic_obstacles_topic: /Obstacles/Dynamic
+    control_rate_hz: 20.0
+
+    wheelbase_m: 0.257
+    truck_radius_m: 0.13
+    truck_length_m: 0.40
+    a_min: -5.0
+    a_max: 5.0
+    omega_min: -3.0
+    omega_max: 3.0
+    delta_min: -0.35
+    delta_max: 0.35
+    v_min: 0.0
+    v_max: 2.0
+
+    dt: 0.05
+    horizon_H: 30
+    r_safe_lane: 0.05
+    r_safe_obs: 0.05
+    r_safe_traf: 0.10
+    r_safe_kin: 0.02
+    obstacle_radius_default: 0.12
+    obstacle_memory_ttl_s: 1.0
+    obstacle_memory_growth: 0.5
+
+    K_e: 1.0
+    K_p: 5.0
+    v_eps: 0.3
+    lambda_cbf: 0.4
+    qp_R_accel: 1.0
+    qp_R_omega: 1.0
+    grad_eps: 0.001
+    exact_safety_check: true
+    hysteresis_cycles: 5
+    passthrough_tolerance: 0.001
+    stale_timeout_s: 0.5
+    lane_change_cost: 1.0
+
+joy_to_servo_node:
+  ros__parameters:
+    joy_topic: /joy
+    human_control_topic: /human_control
+    publish_rate_hz: 30.0
+    throttle_axis: 1
+    steer_axis: 0
+    deadman_button: -1
+    throttle_scale: 1.0
+    steer_scale: 0.35
+    throttle_offset: 0.0
+    invert_throttle: false
+    invert_steer: false
+
+safety_viz_node:
+  ros__parameters:
+    backup_traj_topic: /safety/backup_traj
+    value_topic: /safety/value
+    override_topic: /safety/override
+    marker_topic: /safety/markers
+

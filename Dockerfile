@@ -29,6 +29,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-foxy-rviz2 \
     ros-foxy-nav-msgs \
     ros-foxy-geometry-msgs \
+    ros-foxy-sensor-msgs \
     ros-foxy-std-msgs \
     ros-foxy-std-srvs \
     ros-foxy-visualization-msgs \
@@ -42,6 +43,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-foxy-rosidl-default-runtime \
     ros-foxy-builtin-interfaces \
     ros-foxy-ackermann-msgs \
+    ros-foxy-joy \
     ros-foxy-rmw-cyclonedds-cpp \
     # Lanelet2
     ros-foxy-lanelet2 \

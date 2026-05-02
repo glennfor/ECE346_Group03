@@ -30,6 +30,8 @@
   <build_depend>std_msgs</build_depend>
   <build_depend>std_srvs</build_depend>
   <build_depend>racecar_msgs</build_depend>
+  <build_depend>ackermann_msgs</build_depend>
+  <build_depend>sensor_msgs</build_depend>
 
     <!-- Needed by any package that consumes your generated interfaces -->
   <exec_depend>rosidl_default_runtime</exec_depend>
@@ -48,6 +50,8 @@
   <exec_depend>queue</exec_depend>
   <exec_depend>time</exec_depend>
   <exec_depend>hppfcl</exec_depend>
+  <exec_depend>ackermann_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
 
    <!-- Run-time (exec) deps for your Python nodes -->
   <exec_depend>rclpy</exec_depend>

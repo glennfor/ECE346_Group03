@@ -1,0 +1,110 @@
+from dataclasses import dataclass
+from typing import Optional, Tuple
+
+import numpy as np
+
+from .dynamics import wrap_angle
+
+
+@dataclass
+class LaneSample:
+    point: np.ndarray
+    tangent: float
+    signed_lateral_error: float
+    width_left: float
+    width_right: float
+
+
+@dataclass
+class LaneContext:
+    centerline: np.ndarray
+    width_left: np.ndarray
+    width_right: np.ndarray
+    tangent: np.ndarray
+
+    @classmethod
+    def from_centerline(
+        cls,
+        centerline: np.ndarray,
+        width_left: np.ndarray,
+        width_right: np.ndarray,
+    ) -> "LaneContext":
+        centerline = np.asarray(centerline, dtype=float)
+        if centerline.shape[0] < 2:
+            centerline = np.vstack([centerline, centerline[0] + np.array([1.0, 0.0])])
+        width_left = np.asarray(width_left, dtype=float)
+        width_right = np.asarray(width_right, dtype=float)
+        if width_left.shape[0] < centerline.shape[0]:
+            width_left = np.resize(width_left, centerline.shape[0])
+        if width_right.shape[0] < centerline.shape[0]:
+            width_right = np.resize(width_right, centerline.shape[0])
+        diffs = np.gradient(centerline, axis=0)
+        tangent = np.arctan2(diffs[:, 1], diffs[:, 0])
+        return cls(centerline, width_left, width_right, tangent)
+
+    @classmethod
+    def fallback_straight(cls, width: float = 1.0) -> "LaneContext":
+        xs = np.linspace(-20.0, 20.0, 200)
+        centerline = np.column_stack([xs, np.zeros_like(xs)])
+        half_width = np.full(xs.shape, width / 2.0)
+        return cls.from_centerline(centerline, half_width, half_width)
+
+    def query(self, px: float, py: float) -> LaneSample:
+        p = np.array([px, py], dtype=float)
+        idx = int(np.argmin(np.linalg.norm(self.centerline - p, axis=1)))
+        center = self.centerline[idx]
+        tangent = float(self.tangent[idx])
+        tangent_vec = np.array([np.cos(tangent), np.sin(tangent)])
+        left_normal = np.array([-tangent_vec[1], tangent_vec[0]])
+        signed_lateral_error = float(np.dot(p - center, left_normal))
+
+        return LaneSample(
+            point=center,
+            tangent=tangent,
+            signed_lateral_error=signed_lateral_error,
+            width_left=float(self.width_left[idx]),
+            width_right=float(self.width_right[idx]),
+        )
+
+
+class LaneletContextBuilder:
+    def __init__(self, map_file: str, node: Optional[object] = None, lane_change_cost: float = 1.0):
+        self.map_file = map_file
+        self.node = node
+        self.lane_change_cost = lane_change_cost
+        self._wrapper = None
+
+    def _load_wrapper(self):
+        if self._wrapper is not None:
+            return self._wrapper
+
+        from routing.routing.lanelet_wrapper import LaneletWrapper
+
+        if self.node is not None:
+            self.node.lane_change_cost = self.lane_change_cost
+        self._wrapper = LaneletWrapper(self.map_file, self.node)
+        return self._wrapper
+
+    def build_near(self, pose: np.ndarray, distance_m: float = 8.0) -> LaneContext:
+        wrapper = self._load_wrapper()
+        lanelet, arc = wrapper.get_closest_lanelet(pose[:3], check_psi=True)
+        start_s = getattr(arc, "length", 0.0) / max(wrapper.get_lanelet_length(lanelet), 1e-6)
+        routes = wrapper.get_reachable_path(lanelet, start_s, distance_m, allow_lane_change=True)
+
+        centerline = routes[0] if routes else np.array([[pose[0], pose[1]], [pose[0] + 1.0, pose[1]]])
+        width_left = []
+        width_right = []
+        for x, y in centerline:
+            nearest_lanelet, _ = wrapper.get_closest_lanelet([x, y], check_psi=False)
+            point = type("Point", (), {"x": float(x), "y": float(y)})()
+            left, right = wrapper.get_lane_width(point, nearest_lanelet, allow_lane_change=True)
+            width_left.append(left)
+            width_right.append(right)
+
+        return LaneContext.from_centerline(centerline, np.array(width_left), np.array(width_right))
+
+
+def heading_error_to_lane(x: np.ndarray, lane: LaneContext) -> Tuple[float, LaneSample]:
+    sample = lane.query(float(x[0]), float(x[1]))
+    return wrap_angle(sample.tangent - float(x[3])), sample
+

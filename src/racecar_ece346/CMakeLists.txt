@@ -18,6 +18,8 @@ find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(rcl_interfaces REQUIRED)
+find_package(ackermann_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
 
 #Packages that were created
 find_package(racecar_msgs REQUIRED)
@@ -41,6 +43,9 @@ install(PROGRAMS
   ece346/Lab3/scripts/dyn_obs_node.py
   ece346/Lab5/scripts/data_recorder_node.py
   ece346/Lab5/scripts/bc_eval_node.py
+  ece346/Final_Project/scripts/joy_to_servo_node.py
+  ece346/Final_Project/scripts/safety_filter_node.py
+  ece346/Final_Project/scripts/safety_viz_node.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -54,6 +59,7 @@ install(DIRECTORY
   ece346/lab1_truck/config
   ece346/Lab3/config
   ece346/Lab5/config
+  ece346/Final_Project/config
   DESTINATION share/${PROJECT_NAME}
 )
 
@@ -65,6 +71,7 @@ install(DIRECTORY
   ece346/lab1_truck/launch
   ece346/Lab3/launch
   ece346/Lab5/launch
+  ece346/Final_Project/launch
   DESTINATION share/${PROJECT_NAME}
 )
 
