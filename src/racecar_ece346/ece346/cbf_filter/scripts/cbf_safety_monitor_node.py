@@ -98,6 +98,10 @@ class SafetyMonitorNode(Node):
         self.grad_pub = self.create_publisher(Float64MultiArray, "/safety/grad", 1)
         self.binding_pub = self.create_publisher(String, "/safety/binding_constraint", 1)
         self.margins_pub = self.create_publisher(Float64MultiArray, "/safety/margins_along_traj", 1)
+        # Debug: per-component margins at the CURRENT state (not the trajectory).
+        # Echo with: ros2 topic echo /safety/debug_margins
+        # Order: [lane, obstacle, traffic, kinematic]
+        self.debug_margins_pub = self.create_publisher(Float64MultiArray, "/safety/debug_margins", 1)
 
     # ---- Callbacks ----
 
@@ -142,6 +146,13 @@ class SafetyMonitorNode(Node):
         try:
             obstacles = self.static_memory.get(now)
             ctx = MarginContext(self.lane_context, obstacles, self.traffic, self.params)
+
+            # Publish per-component margins at the CURRENT state for debugging.
+            from .margins import margin_components
+            comps = margin_components(state, ctx)
+            dm = Float64MultiArray()
+            dm.data = [comps["lane"], comps["obstacle"], comps["traffic"], comps["kinematic"]]
+            self.debug_margins_pub.publish(dm)
 
             # Evaluate margin at every state in the backup trajectory.
             margins = []
