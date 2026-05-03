@@ -1,0 +1,118 @@
+ilqr_safety_filter_node:
+  ros__parameters:
+    command_mode: servo
+    odom_topic: /slam_pose
+    human_control_topic: /human_control
+    filtered_control_topic: /control
+    static_obstacles_topic: /Obstacles/Static
+    dynamic_obstacles_topic: /Obstacles/Dynamic
+    planner_rate_hz: 10.0
+    control_rate_hz: 20.0
+
+    # Truck physical constants (1/10 racecar)
+    wheelbase_m: 0.257
+    truck_radius_m: 0.13
+    truck_length_m: 0.40
+
+    # Control limits
+    a_min: -5.0
+    a_max: 5.0
+    omega_min: -6.0
+    omega_max: 6.0
+    delta_min: -0.35
+    delta_max: 0.35
+    v_min: 0.0
+    v_max: 5.0
+
+    # Discretization (matches control_rate_hz = 20 Hz)
+    dt: 0.05
+
+    # ILQR solver
+    horizon_H: 30
+    ilqr_max_iters: 10
+    ilqr_tol: 0.001
+    lm_init: 0.000001
+    lm_min: 0.00000001
+    lm_max: 1.0
+    lm_scale_up: 10.0
+    lm_scale_down: 10.0
+
+    # Cost weights
+    w_barrier: 1000.0        # dominant barrier term
+    tau: 0.1                 # softplus sharpness
+    w_centerline: 1.0        # cross-track tracking weight
+    w_heading: 0.5           # heading error weight
+    w_speed: 0.1             # speed preserving weight
+    R_accel: 0.1             # acceleration regularization
+    R_omega: 0.05            # steering-rate regularization
+    soft_min_beta: 50.0      # log-sum-exp β for soft-min inside cost
+
+    # Safety margins
+    r_safe_lane: 0.05
+    r_safe_obs: 0.05
+    r_safe_traf: 0.10
+    r_safe_kin: 0.02
+    obstacle_radius_default: 0.06
+    obstacle_memory_ttl_s: 1.0
+    obstacle_memory_growth: 0.5
+
+    # Monitor / arbiter
+    hysteresis_cycles: 5
+    passthrough_tolerance: 0.001
+    stale_timeout_s: 0.25
+
+    # JAX fixed array sizes — changes require restart
+    max_obstacles: 10
+    n_lane_pts: 100
+
+    # Lane context
+    map_file: ""
+    lane_change_cost: 1.0
+    lane_context_rebuild_distance_m: 0.25
+    lane_context_rebuild_yaw_rad: 0.35
+
+    publish_debug: true
+
+simulator_node:
+  ros__parameters:
+    control_topic: /control
+    odom_topic: /slam_pose
+    pub_rate: 30
+    init_x: 2.0
+    init_y: 0.3
+    init_yaw: 0.0
+    reset_service: /simulation/reset
+
+traffic_simulation_node:
+  ros__parameters:
+    ~num_dyn_obs: 1
+    ~num_static_obs: 1
+    ~static_obs_size: 0.2
+    static_obs_topic: /Obstacles/Static
+    dyn_obs_topic: /Obstacles/Dynamic
+    pub_rate: 30
+    static_obs_location: ''
+    reset_obstacle_service: /simulation/reset_static_obstacles
+
+joy_to_servo_node:
+  ros__parameters:
+    joy_topic: /joy
+    human_control_topic: /human_control
+    publish_rate_hz: 30.0
+    throttle_axis: 1
+    steer_axis: 0
+    steer_axis_alt: 3
+    deadman_button: 4
+    throttle_scale: 0.6
+    steer_scale: 0.35
+    throttle_offset: 0.0
+    invert_throttle: false
+    invert_steer: false
+
+ilqr_safety_viz_node:
+  ros__parameters:
+    plan_path_topic: /safety/plan_path
+    vhat_topic: /safety/V_hat
+    override_topic: /safety/override
+    binding_topic: /safety/binding_constraint
+    marker_topic: /safety/markers

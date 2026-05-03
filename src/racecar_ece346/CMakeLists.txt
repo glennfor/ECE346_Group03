@@ -46,6 +46,8 @@ install(PROGRAMS
   ece346/Final_Project/scripts/joy_to_servo_node.py
   ece346/Final_Project/scripts/safety_filter_node.py
   ece346/Final_Project/scripts/safety_viz_node.py
+  ece346/ilqr_safety_filter/scripts/ilqr_safety_filter_node.py
+  ece346/ilqr_safety_filter/scripts/ilqr_safety_viz_node.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -60,6 +62,7 @@ install(DIRECTORY
   ece346/Lab3/config
   ece346/Lab5/config
   ece346/Final_Project/config
+  ece346/ilqr_safety_filter/config
   DESTINATION share/${PROJECT_NAME}
 )
 
@@ -72,6 +75,7 @@ install(DIRECTORY
   ece346/Lab3/launch
   ece346/Lab5/launch
   ece346/Final_Project/launch
+  ece346/ilqr_safety_filter/launch
   DESTINATION share/${PROJECT_NAME}
 )
 
