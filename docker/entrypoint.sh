@@ -3,7 +3,9 @@ set -e
 
 # Start virtual framebuffer + VNC + noVNC so RViz/rqt appear in browser at http://localhost:6080
 Xvfb :1 -screen 0 1920x1080x24 &
-x11vnc -display :1 -forever -nopw -quiet &
+sleep 1
+x11vnc -display :1 -forever -nopw &
+sleep 1
 websockify --web /usr/share/novnc 6080 localhost:5900 &
 
 export DISPLAY=:1

@@ -46,9 +46,9 @@ services:
     # --- Device passthrough ---
     # /dev/dri: GPU passthrough (AMD/Intel via DRI, harmless if not present).
     # /dev/input: gamepads/joysticks for ros2 run joy joy_node.
-    devices:
-      - /dev/dri:/dev/dri
-      - /dev/input:/dev/input
+    # devices:  # Linux-only — comment out on Windows (no /dev/dri or /dev/input)
+    #   - /dev/dri:/dev/dri
+    #   - /dev/input:/dev/input
 
     # Lets the container read joystick devices without running fully privileged.
     # group_add:

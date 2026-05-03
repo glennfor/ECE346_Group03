@@ -40,7 +40,7 @@ safety_filter_node:
     qp_R_accel: 1.0               # QP penalty on changing human acceleration input.
     qp_R_omega: 1.0               # QP penalty on changing human steering-rate input.
     grad_eps: 0.001               # Finite-difference step for estimating the CBF gradient.
-    exact_safety_check: true      # Re-simulate candidate control and reject it if h gets worse.
+    exact_safety_check: false     # Re-simulate candidate control and reject it if h gets worse.
     hysteresis_cycles: 5          # Keep override active briefly after intervention starts.
     passthrough_tolerance: 0.001  # Difference below this is treated as unchanged human input.
     stale_timeout_s: 0.5          # Fall back if odom or human command is older than this.
