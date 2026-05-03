@@ -29,8 +29,8 @@ backup_planner_node:
     horizon_H: 30                     # 1.5 s lookahead; measure T_stop on hardware and set H = ceil(1.5*T_stop/dt)
 
     # Backup policy gains
-    K_e: 1.0                          # cross-track error gain
-    K_p: 5.0                          # steering rate gain toward desired angle
+    K_e: 3.0                          # cross-track error gain (higher = less lateral drift during braking)
+    K_p: 10.0                         # steering rate gain toward desired angle
     v_eps: 0.3                        # prevents division-by-zero at low speed
 
     lane_change_cost: 1.0
@@ -59,15 +59,15 @@ safety_monitor_node:
     v_max: 5.0
     dt: 0.05
     horizon_H: 30
-    K_e: 1.0
-    K_p: 5.0
+    K_e: 3.0
+    K_p: 10.0
     v_eps: 0.3
 
     # Safety margins (signed-distance buffer beyond geometric clearance)
-    r_safe_lane: 0.05                 # extra clearance from lane boundary
-    r_safe_obs: 0.05                  # extra clearance from static obstacles
-    r_safe_traf: 0.10                 # extra clearance from traffic
-    r_safe_kin: 0.02                  # buffer inside steering/speed limits
+    r_safe_lane: 0.01                 # narrow ECE346 track: keep buffer small so backup traj stays safe
+    r_safe_obs: 0.03                  # extra clearance from static obstacles
+    r_safe_traf: 0.06                 # extra clearance from traffic
+    r_safe_kin: 0.0                   # no buffer on kinematic limits (truck stopping is safe)
 
     obstacle_radius_default: 0.06    # standard ECE346 cube (6 cm half-size)
     obstacle_memory_ttl_s: 1.0       # keep last-seen obstacle for this many seconds

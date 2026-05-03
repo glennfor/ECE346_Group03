@@ -148,7 +148,7 @@ class SafetyMonitorNode(Node):
             ctx = MarginContext(self.lane_context, obstacles, self.traffic, self.params)
 
             # Publish per-component margins at the CURRENT state for debugging.
-            from .margins import margin_components
+            from ece346.cbf_filter.cbf_filter.margins  import margin_components
             comps = margin_components(state, ctx)
             dm = Float64MultiArray()
             dm.data = [comps["lane"], comps["obstacle"], comps["traffic"], comps["kinematic"]]
