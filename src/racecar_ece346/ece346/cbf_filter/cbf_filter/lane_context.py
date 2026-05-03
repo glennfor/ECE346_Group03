@@ -32,6 +32,7 @@ class LaneContext:
     width_left: np.ndarray    # (N,)  — left clearance from centerline
     width_right: np.ndarray   # (N,)  — right clearance from centerline
     tangent: np.ndarray       # (N,)  — heading at each centerline point
+    is_fallback: bool = False  # True when using the dummy straight lane (map not loaded)
 
     @classmethod
     def from_centerline(
@@ -52,11 +53,18 @@ class LaneContext:
 
     @classmethod
     def fallback_straight(cls, width: float = 1.0) -> "LaneContext":
-        """Straight-line lane used before the map is loaded."""
+        """Dummy straight lane used before the Lanelet2 map is loaded.
+
+        is_fallback=True so the monitor knows to skip publishing until a real
+        map is available.  The geometry (y=0, ±0.5 m) has no relation to the
+        actual track and must never be used for safety decisions.
+        """
         xs = np.linspace(-20.0, 20.0, 200)
         centerline = np.column_stack([xs, np.zeros_like(xs)])
         hw = np.full(xs.shape, width / 2.0)
-        return cls.from_centerline(centerline, hw, hw)
+        ctx = cls.from_centerline(centerline, hw, hw)
+        ctx.is_fallback = True
+        return ctx
 
     def query(self, px: float, py: float) -> LaneSample:
         """Project (px, py) onto the nearest centerline segment."""

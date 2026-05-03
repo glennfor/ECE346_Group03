@@ -46,10 +46,17 @@ class MarginContext:
 
 
 def _footprint_points(x: np.ndarray, p: CbfParams) -> List[np.ndarray]:
-    """3 circles along the truck body axis: rear, center, front."""
+    """3 circles spanning the truck body: rear bumper, mid-wheelbase, front bumper.
+
+    State [px, py] is the rear-axle position.  Assuming equal front/rear overhang:
+      overhang = (truck_length - wheelbase) / 2
+      rear bumper  = -overhang from rear axle
+      front bumper = wheelbase + overhang from rear axle
+    """
     px, py, _, psi, _ = x
     heading = np.array([np.cos(psi), np.sin(psi)])
-    offsets = np.array([-0.35, 0.0, 0.35]) * p.truck_length_m
+    overhang = (p.truck_length_m - p.wheelbase_m) / 2.0
+    offsets = np.array([-overhang, p.wheelbase_m / 2.0, p.wheelbase_m + overhang])
     base = np.array([px, py])
     return [base + off * heading for off in offsets]
 

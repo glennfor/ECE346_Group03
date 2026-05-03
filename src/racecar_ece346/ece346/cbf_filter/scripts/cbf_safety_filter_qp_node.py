@@ -70,6 +70,8 @@ class SafetyFilterQPNode(Node):
         self.last_grad: np.ndarray = None
         self.last_safety_time: float = None
         self.last_backup_u0: np.ndarray = None
+        self.last_grad_control: np.ndarray = None
+        self.last_h_backup: float = None
 
         # After an override, keep the QP active for hysteresis_cycles more ticks.
         # This prevents rapid on/off flicker near the safe-set boundary.
@@ -87,6 +89,8 @@ class SafetyFilterQPNode(Node):
         self.create_subscription(Float32, "/safety/value", self._value_cb, 1)
         self.create_subscription(Float64MultiArray, "/safety/grad", self._grad_cb, 1)
         self.create_subscription(Float64MultiArray, "/safety/backup_u0", self._u0_cb, 1)
+        self.create_subscription(Float64MultiArray, "/safety/grad_control", self._grad_control_cb, 1)
+        self.create_subscription(Float32, "/safety/h_backup", self._h_backup_cb, 1)
 
         self.control_pub = self.create_publisher(ServoMsg, self.params.filtered_control_topic, 1)
         self.override_pub = self.create_publisher(Bool, "/safety/override", 1)
@@ -114,6 +118,13 @@ class SafetyFilterQPNode(Node):
     def _u0_cb(self, msg: Float64MultiArray):
         if len(msg.data) == 2:
             self.last_backup_u0 = np.array(msg.data, dtype=float)
+
+    def _grad_control_cb(self, msg: Float64MultiArray):
+        if len(msg.data) == 2:
+            self.last_grad_control = np.array(msg.data, dtype=float)
+
+    def _h_backup_cb(self, msg: Float32):
+        self.last_h_backup = float(msg.data)
 
     # ---- Main loop ----
 
@@ -173,23 +184,30 @@ class SafetyFilterQPNode(Node):
         grad = self.last_grad
         p = self.params
 
-        # One Euler step to linearize h around the current state.
-        f_human = step(state, u_human, p)
-
-        # B = ∂f/∂u (Euler bicycle model, shape (5,2)):
-        #   B[2,0] = dt  (accel affects v)
-        #   B[4,1] = dt  (omega affects delta)
-        # g = B^T ∇h  selects [dt·∇h[2],  dt·∇h[4]]
-        B = control_jacobian(p)
-        g = B.T @ grad
-
-        # Linearized CBF constraint:  g^T u >= c
-        # Derived from  ∇h·(f(x,u)-x) >= -λ h  with f linearized in u.
-        c = (
-            -p.lambda_cbf * h
-            - float(grad @ (f_human - state))
-            + float(g @ u_human)
-        )
+        # Prefer the control gradient published by the monitor: it captures the
+        # full H-step effect of [a, omega] on h_imp via finite differences
+        # through the rollout.  B^T ∇h only sees the 1-step algebraic coupling
+        # (B[2,0]=dt, B[4,1]=dt) which is near-zero for lane-dominated barriers
+        # because the lane gradient lives in px/py/psi, not v/δ.
+        if (self.last_grad_control is not None
+                and self.last_h_backup is not None
+                and self.last_backup_u0 is not None):
+            g = self.last_grad_control
+            h_backup0 = self.last_h_backup
+            u0 = self.last_backup_u0
+            # Linearization of h_imp(f(x,u)) around u0:
+            #   h_imp(f(x,u)) ≈ h_backup0 + g^T (u - u0) >= (1-λ)*h
+            c = (1.0 - p.lambda_cbf) * h - h_backup0 + float(g @ u0)
+        else:
+            # Fallback when control gradient not yet available.
+            f_human = step(state, u_human, p)
+            B = control_jacobian(p)
+            g = B.T @ grad
+            c = (
+                -p.lambda_cbf * h
+                - float(grad @ (f_human - state))
+                + float(g @ u_human)
+            )
 
         result = qp_solve(u_human, g, c, p)
         u_out = result.control

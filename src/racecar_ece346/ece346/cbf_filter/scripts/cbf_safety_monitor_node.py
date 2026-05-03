@@ -41,7 +41,7 @@ from racecar_msgs.msg import OdometryArray
 
 from ece346.cbf_filter.cbf_filter.backup_policy import brake_and_recenter
 from ece346.cbf_filter.cbf_filter.config import CbfParams, declare_and_load
-from ece346.cbf_filter.cbf_filter.dynamics import rollout
+from ece346.cbf_filter.cbf_filter.dynamics import rollout, step
 from ece346.cbf_filter.cbf_filter.lane_context import LaneContext, LaneletContextBuilder
 from ece346.cbf_filter.cbf_filter.margins import MarginContext, margin_components, margin_total
 from ece346.cbf_filter.cbf_filter.obstacle_memory import ObstacleMemory
@@ -102,6 +102,12 @@ class SafetyMonitorNode(Node):
         # Echo with: ros2 topic echo /safety/debug_margins
         # Order: [lane, obstacle, traffic, kinematic]
         self.debug_margins_pub = self.create_publisher(Float64MultiArray, "/safety/debug_margins", 1)
+        # Control gradient: [∂h/∂a, ∂h/∂omega] through the full H-step rollout.
+        # Used by safety_filter_qp_node instead of B^T ∇h (which is near-zero
+        # for lane-dominated barriers because lane gradient lives in px/py/psi,
+        # not in v/δ which are the only rows B touches).
+        self.grad_control_pub = self.create_publisher(Float64MultiArray, "/safety/grad_control", 1)
+        self.h_backup_pub = self.create_publisher(Float32, "/safety/h_backup", 1)
 
     # ---- Callbacks ----
 
@@ -133,6 +139,17 @@ class SafetyMonitorNode(Node):
         if (self.last_traj_data is None
                 or self.last_traj_time is None
                 or now - self.last_traj_time > self.params.stale_timeout_s):
+            return
+
+        # Lane map not yet loaded — skip publishing so the QP node treats safety
+        # data as stale and passes human control through unchanged.  The fallback
+        # straight lane (y=0, ±0.5 m) has no relation to the real track and must
+        # never drive safety decisions.
+        if self.lane_context.is_fallback:
+            self.get_logger().error(
+                "Lane map not loaded — safety monitor publishing suppressed until map is ready.",
+                throttle_duration_sec=5.0,
+            )
             return
 
         try:
@@ -170,7 +187,13 @@ class SafetyMonitorNode(Node):
             # H-step rollout from the perturbed state, and measure Δh_imp.
             grad = self._gradient(state, h_imp, ctx)
 
-            self._publish(h_imp, grad, binding, margins)
+            # Control gradient: ∂h_imp/∂u through the H-step rollout.
+            # h_backup0 = barrier starting from f(x, u0) — min over traj[1:].
+            h_backup0 = float(min(margins[1:])) if len(margins) > 1 else h_imp
+            u0 = brake_and_recenter(state, self.lane_context, self.params)
+            g_ctrl = self._control_gradient(state, h_backup0, u0, ctx)
+
+            self._publish(h_imp, grad, binding, margins, g_ctrl, h_backup0)
 
         except Exception:
             self.get_logger().error(f"safety_monitor fault:\n{traceback.format_exc()}")
@@ -187,6 +210,31 @@ class SafetyMonitorNode(Node):
             h_pert = min(margin_total(s, ctx)[0] for s in traj_pert)
             grad[i] = (h_pert - h0) / p.grad_eps
         return grad
+
+    def _control_gradient(
+        self, state: np.ndarray, h_backup0: float, u0: np.ndarray, ctx: MarginContext
+    ) -> np.ndarray:
+        """
+        Finite-difference ∂h_imp/∂u — 2 extra rollouts, one per control dim.
+
+        Perturbs each of [a, omega] by eps=1.0, applies the perturbed control
+        for one step, then runs the backup policy for H steps from there.
+        This captures the full multi-step effect of control on the barrier,
+        unlike B^T ∇h which only sees the 1-step algebraic coupling.
+        """
+        lane = self.lane_context
+        p = self.params
+        policy = lambda s: brake_and_recenter(s, lane, p)
+        eps = 1.0
+        g_ctrl = np.zeros(2, dtype=float)
+        for i in range(2):
+            du = np.zeros(2)
+            du[i] = eps
+            x1 = step(state, u0 + du, p)
+            traj_p = rollout(x1, policy, p)
+            h_p = float(min(margin_total(s, ctx)[0] for s in traj_p))
+            g_ctrl[i] = (h_p - h_backup0) / eps
+        return g_ctrl
 
     # ---- Lane context ----
 
@@ -206,7 +254,15 @@ class SafetyMonitorNode(Node):
 
     # ---- Publishers ----
 
-    def _publish(self, h_imp: float, grad: np.ndarray, binding: str, margins: list):
+    def _publish(
+        self,
+        h_imp: float,
+        grad: np.ndarray,
+        binding: str,
+        margins: list,
+        g_ctrl: np.ndarray,
+        h_backup0: float,
+    ):
         v = Float32()
         v.data = h_imp
         self.value_pub.publish(v)
@@ -222,6 +278,14 @@ class SafetyMonitorNode(Node):
         m = Float64MultiArray()
         m.data = [float(x) for x in margins]
         self.margins_pub.publish(m)
+
+        gc = Float64MultiArray()
+        gc.data = [float(x) for x in g_ctrl]
+        self.grad_control_pub.publish(gc)
+
+        hb = Float32()
+        hb.data = h_backup0
+        self.h_backup_pub.publish(hb)
 
 
 def main(args=None):
