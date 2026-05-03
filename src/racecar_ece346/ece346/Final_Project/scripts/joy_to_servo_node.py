@@ -99,11 +99,17 @@ class JoyToServoNode(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = JoyToServoNode()
+    executor = rclpy.executors.SingleThreadedExecutor()
+    executor.add_node(node)
     try:
-        rclpy.spin(node)
+        executor.spin()
+    except (KeyboardInterrupt, SystemExit):
+        pass
     finally:
+        executor.shutdown()
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == "__main__":
