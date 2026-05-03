@@ -18,13 +18,16 @@ services:
     container_name: safe_ros2_foxy
     stdin_open: true
     tty: true
+    ipc: host
 
     # --- Networking ---
     network_mode: host
+    ports:
+      - "6080:6080"
 
-    # --- GUI / X11 forwarding ---
+    # --- GUI via noVNC (open http://localhost:6080/vnc.html in browser) ---
     environment:
-      - DISPLAY=${DISPLAY}
+      - DISPLAY=:1
       - QT_X11_NO_MITSHM=1
       - ROS_DOMAIN_ID=0
       - ROS_WS=/ros2_ws

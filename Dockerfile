@@ -59,9 +59,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # ---------- Newer Mesa drivers for modern GPUs (AMD/Intel) ----------
-RUN add-apt-repository -y ppa:kisak/kisak-mesa && \
-    apt-get update && apt-get upgrade -y && \
-    rm -rf /var/lib/apt/lists/*
+# RUN add-apt-repository -y ppa:kisak/kisak-mesa && \
+#     apt-get update && apt-get upgrade -y && \
+#     rm -rf /var/lib/apt/lists/*
 
 # ---------- Upgrade pip ----------
 # Pin setuptools < 71 to avoid canonicalize_version incompatibility with pyspline
@@ -122,6 +122,6 @@ RUN echo 'export LIBGL_ALWAYS_SOFTWARE=1' >> /root/.bashrc && \
 
 # ---------- Entrypoint ----------
 COPY docker/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["bash"]
