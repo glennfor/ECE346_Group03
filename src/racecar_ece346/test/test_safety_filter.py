@@ -61,7 +61,7 @@ def test_lane_and_obstacle_margins():
 
     contact_distance = params.truck_radius_m + 0.1 + params.r_safe_obs
     obs = Obstacle(1, np.array([contact_distance, 0.0]), 0.1)
-    assert abs(margin_obstacle(x_center, [obs], params)) < 1e-9
+    assert margin_obstacle(x_center, [obs], params) < 0.0
     assert margin_obstacle(x_center, [], params) == 100.0
 
 

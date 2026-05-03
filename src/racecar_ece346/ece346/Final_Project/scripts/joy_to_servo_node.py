@@ -15,6 +15,7 @@ class JoyToServoNode(Node):
         self.declare_parameter("publish_rate_hz", 30.0)
         self.declare_parameter("throttle_axis", 1)
         self.declare_parameter("steer_axis", 0)
+        self.declare_parameter("steer_axis_alt", 3)
         self.declare_parameter("deadman_button", 4)
         self.declare_parameter("throttle_scale", 1.0)
         self.declare_parameter("steer_scale", 0.35)
@@ -27,6 +28,7 @@ class JoyToServoNode(Node):
         self.publish_rate_hz = self.get_parameter("publish_rate_hz").value
         self.throttle_axis = self.get_parameter("throttle_axis").value
         self.steer_axis = self.get_parameter("steer_axis").value
+        self.steer_axis_alt = self.get_parameter("steer_axis_alt").value
         self.deadman_button = self.get_parameter("deadman_button").value
         self.throttle_scale = self.get_parameter("throttle_scale").value
         self.steer_scale = self.get_parameter("steer_scale").value
@@ -57,7 +59,7 @@ class JoyToServoNode(Node):
             steer = 0.0
         else:
             throttle_axis = self._axis(self.latest_msg, self.throttle_axis)
-            steer_axis = self._axis(self.latest_msg, self.steer_axis)
+            steer_axis = self._steer_axis(self.latest_msg)
             if self.invert_throttle:
                 throttle_axis *= -1.0
             if self.invert_steer:
@@ -79,6 +81,13 @@ class JoyToServoNode(Node):
         if self.deadman_button >= len(msg.buttons):
             return False
         return bool(msg.buttons[self.deadman_button])
+
+    def _steer_axis(self, msg: Joy) -> float:
+        primary = self._axis(msg, self.steer_axis)
+        alternate = self._axis(msg, self.steer_axis_alt)
+        if abs(alternate) > abs(primary):
+            return alternate
+        return primary
 
     @staticmethod
     def _axis(msg: Joy, idx: int) -> float:

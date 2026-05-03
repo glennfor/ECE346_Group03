@@ -45,11 +45,13 @@ def margin_obstacle(
         return 100.0
 
     safety_margin = params.r_safe_obs if safety_margin is None else safety_margin
-    p = np.asarray(x[:2], dtype=float)
-    values = [
-        float(np.linalg.norm(p - obs.position[:2]) - params.truck_radius_m - obs.radius - safety_margin)
-        for obs in obs_list
-    ]
+    values = []
+    for point in footprint_points(x, params):
+        p = np.asarray(point[:2], dtype=float)
+        values.extend(
+            float(np.linalg.norm(p - obs.position[:2]) - params.truck_radius_m - obs.radius - safety_margin)
+            for obs in obs_list
+        )
     return min(values)
 
 
