@@ -1,0 +1,154 @@
+# CBF Safety Filter — Simulation Parameters
+#
+# Launch: ros2 launch racecar_ece346 cbf_sim_launch.py
+# Passthrough (no intervention): ros2 launch racecar_ece346 cbf_sim_launch.py enable_qp:=false
+# Toggle at runtime: ros2 param set /safety_filter_qp_node enable_qp true
+
+backup_planner_node:
+  ros__parameters:
+    odom_topic: /slam_pose
+    map_file: ""                      # auto-loaded from racecar_routing share
+    control_rate_hz: 20.0
+
+    # Physical constants — match simulator Bicycle4D (wheelbase=0.257)
+    wheelbase_m: 0.257
+    truck_radius_m: 0.13
+    truck_length_m: 0.40
+
+    # Control limits — match simulator Bicycle4D.control_limit
+    a_min: -5.0
+    a_max: 5.0
+    omega_min: -6.0
+    omega_max: 6.0
+    delta_min: -0.35
+    delta_max: 0.35
+    v_min: 0.0
+    v_max: 5.0
+
+    dt: 0.05                          # must match control_rate_hz
+    horizon_H: 30                     # 1.5 s lookahead; measure T_stop on hardware and set H = ceil(1.5*T_stop/dt)
+
+    # Backup policy gains
+    K_e: 1.0                          # cross-track error gain
+    K_p: 5.0                          # steering rate gain toward desired angle
+    v_eps: 0.3                        # prevents division-by-zero at low speed
+
+    lane_change_cost: 1.0
+    lane_context_rebuild_distance_m: 0.5
+    lane_context_rebuild_yaw_rad: 0.5
+
+safety_monitor_node:
+  ros__parameters:
+    odom_topic: /slam_pose
+    backup_traj_topic: /safety/backup_traj
+    static_obstacles_topic: /Obstacles/Static
+    dynamic_obstacles_topic: /Obstacles/Dynamic
+    map_file: ""
+    control_rate_hz: 20.0
+
+    wheelbase_m: 0.257
+    truck_radius_m: 0.13
+    truck_length_m: 0.40
+    a_min: -5.0
+    a_max: 5.0
+    omega_min: -6.0
+    omega_max: 6.0
+    delta_min: -0.35
+    delta_max: 0.35
+    v_min: 0.0
+    v_max: 5.0
+    dt: 0.05
+    horizon_H: 30
+    K_e: 1.0
+    K_p: 5.0
+    v_eps: 0.3
+
+    # Safety margins (signed-distance buffer beyond geometric clearance)
+    r_safe_lane: 0.05                 # extra clearance from lane boundary
+    r_safe_obs: 0.05                  # extra clearance from static obstacles
+    r_safe_traf: 0.10                 # extra clearance from traffic
+    r_safe_kin: 0.02                  # buffer inside steering/speed limits
+
+    obstacle_radius_default: 0.06    # standard ECE346 cube (6 cm half-size)
+    obstacle_memory_ttl_s: 1.0       # keep last-seen obstacle for this many seconds
+    obstacle_memory_growth: 0.5      # obstacle radius grows (m/s) as detection ages
+
+    grad_eps: 0.001                  # finite-difference step for ∇h_imp
+
+    lane_change_cost: 1.0
+    lane_context_rebuild_distance_m: 0.5
+    lane_context_rebuild_yaw_rad: 0.5
+    stale_timeout_s: 0.3
+
+safety_filter_qp_node:
+  ros__parameters:
+    odom_topic: /slam_pose
+    human_control_topic: /human_control
+    filtered_control_topic: /control
+    control_rate_hz: 20.0
+
+    wheelbase_m: 0.257
+    truck_radius_m: 0.13
+    truck_length_m: 0.40
+    a_min: -5.0
+    a_max: 5.0
+    omega_min: -6.0
+    omega_max: 6.0
+    delta_min: -0.35
+    delta_max: 0.35
+    v_min: 0.0
+    v_max: 5.0
+    dt: 0.05
+
+    # CBF aggressiveness: 0.4 is a good starting point.
+    # Increase toward 1.0 if the truck gets too close to things.
+    # Decrease if intervention is too frequent and annoying.
+    lambda_cbf: 0.4
+    qp_R_accel: 1.0
+    qp_R_omega: 1.0
+
+    # enable_qp=false → passthrough mode (joystick drives truck directly).
+    # Safety value /safety/value still updates; only intervention is disabled.
+    enable_qp: true
+
+    hysteresis_cycles: 5              # keep override active this many cycles after boundary cleared
+    passthrough_tolerance: 0.001
+    stale_timeout_s: 0.3
+
+# ---- Infrastructure nodes (not CBF filter itself) ----
+
+simulator_node:
+  ros__parameters:
+    control_topic: /control
+    odom_topic: /slam_pose
+    pub_rate: 30
+    init_x: 2.0
+    init_y: 0.3
+    init_yaw: 0.0
+    reset_service: /simulation/reset
+
+traffic_simulation_node:
+  ros__parameters:
+    ~num_dyn_obs: 1
+    ~num_static_obs: 1
+    ~static_obs_size: 0.2
+    static_obs_topic: /Obstacles/Static
+    dyn_obs_topic: /Obstacles/Dynamic
+    pub_rate: 30
+    static_obs_location: ''
+    reset_obstacle_service: /simulation/reset_static_obstacles
+
+joy_to_servo_node:
+  ros__parameters:
+    joy_topic: /joy
+    human_control_topic: /human_control
+    publish_rate_hz: 30.0
+    throttle_axis: 1
+    steer_axis: 0
+    steer_axis_alt: 3
+    deadman_button: 4
+    throttle_scale: 0.6
+    steer_scale: 0.35
+    throttle_offset: 0.0
+    invert_throttle: false
+    invert_steer: false

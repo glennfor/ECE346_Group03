@@ -1,0 +1,130 @@
+# CBF Safety Filter — Real Truck Parameters
+#
+# Launch: ros2 launch racecar_ece346 cbf_real_launch.py
+#
+# CHECKLIST before first hardware run:
+#   1. Verify wheelbase_m matches the physical truck (measure or check cars.py).
+#   2. Start with enable_qp=false and drive slowly to confirm /slam_pose is live.
+#   3. Confirm /safety/value appears in: ros2 topic echo /safety/value
+#   4. Confirm /safety/binding_constraint cycles through "lane"/"kinematic" during driving.
+#   5. Set enable_qp=true for the first safety-critical run at low speed.
+#   6. Measure stopping time T_stop (see README), then set: horizon_H = ceil(1.5*T_stop/0.05)
+
+backup_planner_node:
+  ros__parameters:
+    odom_topic: /slam_pose
+    map_file: ""
+    control_rate_hz: 20.0
+
+    wheelbase_m: 0.257               # VERIFY against physical truck
+    truck_radius_m: 0.13
+    truck_length_m: 0.40
+
+    # Real truck: more conservative limits
+    a_min: -3.0
+    a_max: 1.5
+    omega_min: -3.0
+    omega_max: 3.0
+    delta_min: -0.35
+    delta_max: 0.35
+    v_min: 0.0
+    v_max: 2.0
+
+    dt: 0.05
+    horizon_H: 30                    # MEASURE T_stop first
+
+    K_e: 1.0
+    K_p: 5.0
+    v_eps: 0.3
+
+    lane_change_cost: 1.0
+    lane_context_rebuild_distance_m: 0.5
+    lane_context_rebuild_yaw_rad: 0.5
+
+safety_monitor_node:
+  ros__parameters:
+    odom_topic: /slam_pose
+    backup_traj_topic: /safety/backup_traj
+    static_obstacles_topic: /Obstacles/Static
+    dynamic_obstacles_topic: /Obstacles/Dynamic
+    map_file: ""
+    control_rate_hz: 20.0
+
+    wheelbase_m: 0.257
+    truck_radius_m: 0.13
+    truck_length_m: 0.40
+    a_min: -3.0
+    a_max: 1.5
+    omega_min: -3.0
+    omega_max: 3.0
+    delta_min: -0.35
+    delta_max: 0.35
+    v_min: 0.0
+    v_max: 2.0
+    dt: 0.05
+    horizon_H: 30
+    K_e: 1.0
+    K_p: 5.0
+    v_eps: 0.3
+
+    # Larger margins for hardware uncertainty
+    r_safe_lane: 0.08
+    r_safe_obs: 0.08
+    r_safe_traf: 0.12
+    r_safe_kin: 0.02
+
+    obstacle_radius_default: 0.06
+    obstacle_memory_ttl_s: 1.0
+    obstacle_memory_growth: 0.5
+
+    grad_eps: 0.001
+
+    lane_change_cost: 1.0
+    lane_context_rebuild_distance_m: 0.5
+    lane_context_rebuild_yaw_rad: 0.5
+    stale_timeout_s: 0.3
+
+safety_filter_qp_node:
+  ros__parameters:
+    odom_topic: /slam_pose
+    human_control_topic: /human_control
+    filtered_control_topic: /control
+    control_rate_hz: 20.0
+
+    wheelbase_m: 0.257
+    truck_radius_m: 0.13
+    truck_length_m: 0.40
+    a_min: -3.0
+    a_max: 1.5
+    omega_min: -3.0
+    omega_max: 3.0
+    delta_min: -0.35
+    delta_max: 0.35
+    v_min: 0.0
+    v_max: 2.0
+    dt: 0.05
+
+    lambda_cbf: 0.4
+    qp_R_accel: 1.0
+    qp_R_omega: 1.0
+
+    enable_qp: true
+
+    hysteresis_cycles: 8              # longer on hardware to reduce chatter
+    passthrough_tolerance: 0.001
+    stale_timeout_s: 0.3
+
+joy_to_servo_node:
+  ros__parameters:
+    joy_topic: /joy
+    human_control_topic: /human_control
+    publish_rate_hz: 30.0
+    throttle_axis: 1
+    steer_axis: 0
+    steer_axis_alt: 3
+    deadman_button: 4
+    throttle_scale: 0.5
+    steer_scale: 0.35
+    throttle_offset: 0.0
+    invert_throttle: false
+    invert_steer: false

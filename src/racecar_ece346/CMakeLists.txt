@@ -48,6 +48,9 @@ install(PROGRAMS
   ece346/Final_Project/scripts/safety_viz_node.py
   ece346/ilqr_safety_filter/scripts/ilqr_safety_filter_node.py
   ece346/ilqr_safety_filter/scripts/ilqr_safety_viz_node.py
+  ece346/cbf_filter/scripts/cbf_backup_planner_node.py
+  ece346/cbf_filter/scripts/cbf_safety_monitor_node.py
+  ece346/cbf_filter/scripts/cbf_safety_filter_qp_node.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -63,6 +66,7 @@ install(DIRECTORY
   ece346/Lab5/config
   ece346/Final_Project/config
   ece346/ilqr_safety_filter/config
+  ece346/cbf_filter/config
   DESTINATION share/${PROJECT_NAME}
 )
 
@@ -76,6 +80,7 @@ install(DIRECTORY
   ece346/Lab5/launch
   ece346/Final_Project/launch
   ece346/ilqr_safety_filter/launch
+  ece346/cbf_filter/launch
   DESTINATION share/${PROJECT_NAME}
 )
 
