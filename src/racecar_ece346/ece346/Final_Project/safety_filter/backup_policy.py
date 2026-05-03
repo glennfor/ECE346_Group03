@@ -17,10 +17,11 @@ def lane_recovery_control(
 ) -> np.ndarray:
     _, _, v, _, _ = x
     human_accel = 0.0 if u_human is None else float(u_human[0])
-    speed_limit_accel = params.lane_recovery_accel_gain * (params.lane_recovery_speed_mps - v)
-    accel = min(human_accel, speed_limit_accel)
-    if v <= 0.02 and human_accel <= 0.0:
-        accel = 0.0
+    if human_accel <= 1e-3:
+        accel = 0.0 if v <= 0.02 else params.a_min
+    else:
+        speed_limit_accel = params.lane_recovery_accel_gain * (params.lane_recovery_speed_mps - v)
+        accel = min(human_accel, speed_limit_accel)
     return recenter_control(x, lane, params, accel)
 
 

@@ -120,6 +120,17 @@ def test_lane_recovery_does_not_accelerate_without_human_input():
     assert control[1] < 0.0
 
 
+def test_lane_recovery_brakes_when_rolling_without_human_input():
+    params = make_params()
+    lane = make_lane()
+    x_left_of_lane = np.array([0.0, 0.45, 0.4, 0.0, 0.0])
+
+    control = lane_recovery_control(x_left_of_lane, lane, params, np.array([0.0, 0.0]))
+
+    assert control[0] == params.a_min
+    assert control[1] < 0.0
+
+
 def test_barrier_detects_close_obstacle():
     params = make_params()
     lane = make_lane()
