@@ -43,7 +43,7 @@ from ece346.cbf_filter.cbf_filter.backup_policy import brake_and_recenter
 from ece346.cbf_filter.cbf_filter.config import CbfParams, declare_and_load
 from ece346.cbf_filter.cbf_filter.dynamics import rollout
 from ece346.cbf_filter.cbf_filter.lane_context import LaneContext, LaneletContextBuilder
-from ece346.cbf_filter.cbf_filter.margins import MarginContext, margin_total
+from ece346.cbf_filter.cbf_filter.margins import MarginContext, margin_components, margin_total
 from ece346.cbf_filter.cbf_filter.obstacle_memory import ObstacleMemory
 from ece346.cbf_filter.cbf_filter.ros_utils import (
     marker_array_to_obstacles,
