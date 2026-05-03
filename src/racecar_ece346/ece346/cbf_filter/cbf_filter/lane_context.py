@@ -111,7 +111,8 @@ class LaneletContextBuilder:
 
     def build_near(self, state: np.ndarray, distance_m: float = 8.0) -> LaneContext:
         wrapper = self._load()
-        pose = state[:3].tolist() if len(state) >= 3 else [state[0], state[1], 0.0]
+        # state = [px, py, v, psi, delta] — pass (px, py, psi) not (px, py, v)
+        pose = [float(state[0]), float(state[1]), float(state[3]) if len(state) >= 4 else 0.0]
         lanelet, arc = wrapper.get_closest_lanelet(pose, check_psi=True)
         L = max(wrapper.get_lanelet_length(lanelet), 1e-6)
         start_s = getattr(arc, "length", 0.0) / L

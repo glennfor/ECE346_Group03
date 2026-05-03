@@ -96,14 +96,15 @@ def margin_obstacle(
 
 def margin_kinematic(x: np.ndarray, p: CbfParams) -> float:
     """
-    How far inside the steering-angle and speed envelopes we are.
-    Keeps the QP from commanding controls that would push us out of bounds.
+    How far inside the steering-angle and speed upper-bound envelopes we are.
+    Note: v_min=0 is NOT included here — a stopped truck is safe (the backup
+    policy brakes to v=0), so penalising low speed would make h_imp permanently
+    negative after any braking manoeuvre.
     """
     _, _, v, _, delta = x
     return float(min(
         delta - p.delta_min - p.r_safe_kin,
         p.delta_max - delta - p.r_safe_kin,
-        v - p.v_min - p.r_safe_kin,
         p.v_max - v - p.r_safe_kin,
     ))
 
