@@ -48,10 +48,7 @@ def ackermann_msg_to_control(msg, state: np.ndarray, params: SafetyFilterParams)
 def control_to_servo_msg(msg_type, u: np.ndarray, state: np.ndarray, params: SafetyFilterParams, stamp):
     msg = msg_type()
     msg.header.stamp = stamp
-    throttle = float(np.clip(u[0], params.a_min, params.a_max))
-    if state[2] <= 0.02 and throttle < 0.0:
-        throttle = 0.0
-    msg.throttle = throttle
+    msg.throttle = float(np.clip(u[0], params.a_min, params.a_max))
     msg.steer = float(np.clip(state[4] + u[1] * params.dt, params.delta_min, params.delta_max))
     msg.reverse = False
     return msg

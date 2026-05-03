@@ -44,6 +44,7 @@ install(PROGRAMS
   ece346/Lab5/scripts/data_recorder_node.py
   ece346/Lab5/scripts/bc_eval_node.py
   ece346/Final_Project/scripts/joy_to_servo_node.py
+  ece346/Final_Project/scripts/keyboard_to_servo_node.py
   ece346/Final_Project/scripts/safety_filter_node.py
   ece346/Final_Project/scripts/safety_viz_node.py
   DESTINATION lib/${PROJECT_NAME}

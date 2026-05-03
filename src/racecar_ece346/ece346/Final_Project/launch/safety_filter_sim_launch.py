@@ -52,6 +52,7 @@ def generate_launch_description():
         parameters=[param_file],
     )
 
+
     safety_viz_node = Node(
         package="racecar_ece346",
         executable="safety_viz_node.py",

@@ -79,3 +79,22 @@ def margin_components(x: np.ndarray, ctx: MarginContext) -> dict:
         "kinematic": margin_kinematic(x, ctx.params),
     }
 
+
+def margin_grad(x: np.ndarray, ctx: MarginContext, eps: float = 1e-4) -> np.ndarray:
+    """
+    Forward finite-difference gradient of margin_total w.r.t. the 5-dim state.
+
+    This perturbs one state at a time and re-evaluates the margin at that single
+    state — NOT the whole-rollout minimum — so the function is smooth and the
+    finite difference is reliable.  This is the ∇m(x_k) term in the paper's
+    sensitivity formula  ∇h(x_0) = Q(t*)ᵀ ∇m(x_{t*}).
+    """
+    m0, _ = margin_total(x, ctx)
+    grad = np.zeros(5, dtype=float)
+    for i in range(5):
+        xp = np.asarray(x, dtype=float).copy()
+        xp[i] += eps
+        mp, _ = margin_total(xp, ctx)
+        grad[i] = (mp - m0) / eps
+    return grad
+

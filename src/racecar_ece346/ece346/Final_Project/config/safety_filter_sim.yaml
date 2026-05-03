@@ -21,12 +21,12 @@ safety_filter_node:
     v_max: 5.0
 
     dt: 0.0333333333              # Prediction timestep; matches the 30 Hz simulator.
-    horizon_H: 45                 # Number of prediction steps used by the backup-CBF rollout.
+    horizon_H: 15                 # Number of prediction steps used by the backup-CBF rollout.
     r_safe_lane: 0.05             # Extra lane-boundary clearance after subtracting truck radius.
     r_safe_obs: 0.20              # Extra clearance around static obstacles.
     r_safe_traf: 0.25             # Extra clearance around moving traffic obstacles.
     r_safe_kin: 0.0               # Extra buffer inside actuator/speed limits.
-    lane_guard_margin_m: 0.25     # Immediate lane override threshold before the CBF/QP logic.
+    lane_guard_margin_m: 0.0      # Immediate lane override threshold before the CBF/QP logic.
     lane_recovery_speed_mps: 0.25 # Max speed target allowed during lane recovery.
     lane_recovery_accel_gain: 4.0 # Gain used to cap acceleration toward lane recovery speed.
     obstacle_radius_default: 0.14 # Radius used when obstacle messages do not provide one.
