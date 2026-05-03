@@ -52,9 +52,12 @@ class ILQRSafetyParams:
     obstacle_memory_growth: float = 0.5
 
     # Monitor / arbiter
-    hysteresis_cycles: int = 5
+    hysteresis_cycles: int = 3
     passthrough_tolerance: float = 1e-3
     stale_timeout_s: float = 0.25
+    # Minimum v_ref given to ILQR planner so it always has a forward incentive.
+    # Without this, v_ref = 0 when car is stopped and ILQR plans to stay still.
+    v_ref_min: float = 0.5
 
     # JAX fixed array sizes — MUST match at runtime; changes require restart
     max_obstacles: int = 10

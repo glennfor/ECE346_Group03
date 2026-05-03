@@ -57,9 +57,10 @@ ilqr_safety_filter_node:
     obstacle_memory_growth: 0.5
 
     # Monitor / arbiter
-    hysteresis_cycles: 5
+    hysteresis_cycles: 3
     passthrough_tolerance: 0.001
     stale_timeout_s: 0.25
+    v_ref_min: 0.5               # minimum speed reference given to ILQR planner
 
     # JAX fixed array sizes — changes require restart
     max_obstacles: 10

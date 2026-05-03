@@ -84,9 +84,14 @@ class ILQRSafetyFilterNode(Node):
         self._current_X: np.ndarray = None
         self._current_U: np.ndarray = None
 
+        # Lane context (written in odom callback, read in planner thread)
+        self._lane_lock = threading.Lock()
+
         self.override_hold: int = 0
 
         self._setup_io()
+
+        self._debug_counter = 0
 
         # JAX JIT warmup before first control tick
         self.get_logger().info("ILQR safety filter: running JAX warmup...")
@@ -115,7 +120,7 @@ class ILQRSafetyFilterNode(Node):
         dummy_state[2] = 0.5   # non-zero speed avoids degenerate Jacobian
         ctx = dummy_context(self.params)
         self.solver.warmup(dummy_state, ctx)
-        self.monitor.solver.warmup(dummy_state, ctx)
+        self.monitor.warmup(dummy_state, ctx)
 
     # ------------------------------------------------------------------
     # I/O setup
@@ -161,9 +166,10 @@ class ILQRSafetyFilterNode(Node):
     # ------------------------------------------------------------------
 
     def odom_callback(self, msg: Odometry):
-        self.last_state = odom_to_state(msg, self.delta_estimate, self.params)
+        state = odom_to_state(msg, self.delta_estimate, self.params)
+        self.last_state = state
         self.last_odom_time = self.get_clock().now().nanoseconds * 1e-9
-        self._maybe_rebuild_lane_context(self.last_state)
+        self._maybe_rebuild_lane_context(state)
 
     def human_callback(self, msg):
         self.last_human_msg = msg
@@ -194,7 +200,9 @@ class ILQRSafetyFilterNode(Node):
             ):
                 return
         try:
-            self.lane_context = self.lane_builder.build_near(state)
+            new_ctx = self.lane_builder.build_near(state)
+            with self._lane_lock:
+                self.lane_context = new_ctx
             self.last_lane_center = p.copy()
             self.last_lane_yaw = float(state[3])
         except Exception as exc:
@@ -261,11 +269,12 @@ class ILQRSafetyFilterNode(Node):
             X_star = self._current_X
             U_star = self._current_U
 
-        if X_star is None or U_star is None:
-            self._safe_fallback(state)
-            return
-
         u_h = self._human_control(state)
+
+        # No plan yet — pass human through, don't brake
+        if X_star is None or U_star is None:
+            self._publish_command(u_h, state)
+            return
 
         try:
             ctx = self._build_context(state)
@@ -292,6 +301,14 @@ class ILQRSafetyFilterNode(Node):
             self._publish_command(u_out, state)
             self._publish_debug(V_hat, binding, u_h, u_out, override, X_star, ctx)
 
+            # Log every 20 cycles (~1 s) so the user can see what's happening
+            self._debug_counter += 1
+            if self._debug_counter % 20 == 0:
+                self.get_logger().info(
+                    f"V_hat={V_hat:.3f}  override={override}  "
+                    f"bind={binding}  u_h={u_h}  u_out={u_out}"
+                )
+
         except Exception:
             self.get_logger().error(
                 f"control_step fault:\n{traceback.format_exc()}"
@@ -305,10 +322,14 @@ class ILQRSafetyFilterNode(Node):
     def _build_context(self, state: np.ndarray):
         now = self.get_clock().now().nanoseconds * 1e-9
         obstacles = self.static_memory.get(now)
-        v_ref = float(np.clip(state[2], 0.0, self.params.v_max))
-        return build_context(
-            obstacles, self.traffic, self.lane_context, v_ref, self.params
-        )
+        # Use at least v_ref_min so the ILQR always has a forward incentive.
+        # Without a minimum, v_ref=0 when stopped and the planner optimally
+        # "stays still" — any steering then produces circular drift.
+        v_ref = float(max(self.params.v_ref_min,
+                          np.clip(state[2], 0.0, self.params.v_max)))
+        with self._lane_lock:
+            lane_ctx = self.lane_context
+        return build_context(obstacles, self.traffic, lane_ctx, v_ref, self.params)
 
     def _human_control(self, state: np.ndarray) -> np.ndarray:
         if self.last_human_msg is None:
