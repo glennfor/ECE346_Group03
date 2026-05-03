@@ -1,31 +1,19 @@
 #!/usr/bin/env python3
 """
-safety_monitor_node — computes the implicit barrier value h_imp(x) and its
-gradient ∇h_imp(x).
+safety_monitor_node — simple heuristic safety monitor.
 
-Role in the 3-node CBF filter: MONITOR
-  "Is it safe for the truck to commit to the backup policy right now?"
+Computes a scalar safety value h at the current truck state and over a
+10-step coast-ahead projection (no acceleration, no steering change):
 
-  h_imp(x) >= 0  →  YES: applying the backup policy for the next H steps
-                        keeps the truck out of every failure set.
-  h_imp(x) < 0  →  NO:  the truck is already in a situation where the backup
-                        policy cannot guarantee safety (e.g., obstacle too close).
+  h >= 0  →  truck is safe (positive clearance from lane + obstacles)
+  h <  0  →  truck has violated a safety margin
 
-How it works
-  1. Receives the backup trajectory from backup_planner_node.
-  2. Evaluates margin_total (lane + obstacle + traffic + kinematic) at each
-     of the H+1 states in the trajectory.
-  3. h_imp = min of all those margins.
-  4. ∇h_imp computed via finite differences: perturb each of the 5 state
-     dimensions by grad_eps, re-run the H-step rollout, measure the change.
-     (6 rollouts total per control cycle — fast enough at 20 Hz in numpy.)
-  5. Publishes h_imp, ∇h_imp, and which constraint is binding.
+No gradients, no QP, no policy rollouts.
 
 Published topics:
-  /safety/value              Float32            — h_imp value
-  /safety/grad               Float64MultiArray  — ∇h_imp, length 5
-  /safety/binding_constraint String             — "lane" / "obstacle" / ...
-  /safety/margins_along_traj Float64MultiArray  — per-step total margin (for plots)
+  /safety/value              Float32           — h (min margin over current + lookahead)
+  /safety/debug_margins      Float64MultiArray — [lane, obstacle, traffic, lookahead_min]
+  /safety/binding_constraint String            — which margin is binding
 """
 import traceback
 
@@ -39,11 +27,10 @@ from visualization_msgs.msg import MarkerArray
 
 from racecar_msgs.msg import OdometryArray
 
-from ece346.cbf_filter.cbf_filter.backup_policy import brake_and_recenter
 from ece346.cbf_filter.cbf_filter.config import CbfParams, declare_and_load
-from ece346.cbf_filter.cbf_filter.dynamics import rollout, step
+from ece346.cbf_filter.cbf_filter.dynamics import step
 from ece346.cbf_filter.cbf_filter.lane_context import LaneContext, LaneletContextBuilder
-from ece346.cbf_filter.cbf_filter.margins import MarginContext, margin_components, margin_total
+from ece346.cbf_filter.cbf_filter.margins import margin_lane, margin_obstacle
 from ece346.cbf_filter.cbf_filter.obstacle_memory import ObstacleMemory
 from ece346.cbf_filter.cbf_filter.ros_utils import (
     marker_array_to_obstacles,
@@ -67,183 +54,110 @@ class SafetyMonitorNode(Node):
 
         self.delta_estimate = 0.0
         self.last_state: np.ndarray = None
-        self.last_traj_data: list = None
-        self.last_traj_time: float = None
         self.traffic: list = []
+        self.last_lane_center: np.ndarray = None
+        self.last_lane_yaw: float = None
 
         self.lane_context: LaneContext = LaneContext.fallback_straight()
         self.lane_builder = LaneletContextBuilder(
             self.params.map_file, self, self.params.lane_change_cost
         )
-        self.last_lane_center: np.ndarray = None
-        self.last_lane_yaw: float = None
-
         self.static_memory = ObstacleMemory(
             self.params.obstacle_memory_ttl_s,
             self.params.obstacle_memory_growth,
             self.params.obstacle_radius_default,
         )
 
-        self._setup_io()
-        self.timer = self.create_timer(1.0 / self.params.control_rate_hz, self._step)
-        self.get_logger().info("safety_monitor_node ready")
-
-    def _setup_io(self):
         self.create_subscription(Odometry, self.params.odom_topic, self._odom_cb, 10)
-        self.create_subscription(Float64MultiArray, "/safety/backup_traj", self._traj_cb, 1)
-        self.create_subscription(MarkerArray, self.params.static_obstacles_topic, self._static_cb, 10)
-        self.create_subscription(OdometryArray, self.params.dynamic_obstacles_topic, self._dynamic_cb, 10)
+        self.create_subscription(
+            MarkerArray, self.params.static_obstacles_topic, self._static_cb, 10
+        )
+        self.create_subscription(
+            OdometryArray, self.params.dynamic_obstacles_topic, self._dynamic_cb, 10
+        )
 
         self.value_pub = self.create_publisher(Float32, "/safety/value", 1)
-        self.grad_pub = self.create_publisher(Float64MultiArray, "/safety/grad", 1)
+        self.debug_pub = self.create_publisher(Float64MultiArray, "/safety/debug_margins", 1)
         self.binding_pub = self.create_publisher(String, "/safety/binding_constraint", 1)
-        self.margins_pub = self.create_publisher(Float64MultiArray, "/safety/margins_along_traj", 1)
-        # Debug: per-component margins at the CURRENT state (not the trajectory).
-        # Echo with: ros2 topic echo /safety/debug_margins
-        # Order: [lane, obstacle, traffic, kinematic]
-        self.debug_margins_pub = self.create_publisher(Float64MultiArray, "/safety/debug_margins", 1)
-        # Control gradient: [∂h/∂a, ∂h/∂omega] through the full H-step rollout.
-        # Used by safety_filter_qp_node instead of B^T ∇h (which is near-zero
-        # for lane-dominated barriers because lane gradient lives in px/py/psi,
-        # not in v/δ which are the only rows B touches).
-        self.grad_control_pub = self.create_publisher(Float64MultiArray, "/safety/grad_control", 1)
-        self.h_backup_pub = self.create_publisher(Float32, "/safety/h_backup", 1)
 
-    # ---- Callbacks ----
+        self.timer = self.create_timer(1.0 / self.params.control_rate_hz, self._step)
+        self.get_logger().info("safety_monitor_node ready")
 
     def _odom_cb(self, msg: Odometry):
         self.last_state = odom_to_state(msg, self.delta_estimate, self.params)
         self._maybe_rebuild_lane(self.last_state)
 
-    def _traj_cb(self, msg: Float64MultiArray):
-        self.last_traj_data = list(msg.data)
-        self.last_traj_time = self.get_clock().now().nanoseconds * 1e-9
-
     def _static_cb(self, msg: MarkerArray):
         t = self.get_clock().now().nanoseconds * 1e-9
-        self.static_memory.update(t, marker_array_to_obstacles(msg, self.params.obstacle_radius_default))
+        self.static_memory.update(
+            t, marker_array_to_obstacles(msg, self.params.obstacle_radius_default)
+        )
 
     def _dynamic_cb(self, msg: OdometryArray):
         self.traffic = odometry_array_to_obstacles(msg, self.params.truck_radius_m)
 
-    # ---- Main loop ----
-
     def _step(self):
         if self.last_state is None:
             return
-
-        now = self.get_clock().now().nanoseconds * 1e-9
-        state = self.last_state.copy()
-
-        # Wait until backup_planner has published a trajectory.
-        if (self.last_traj_data is None
-                or self.last_traj_time is None
-                or now - self.last_traj_time > self.params.stale_timeout_s):
-            return
-
-        # Lane map not yet loaded — skip publishing so the QP node treats safety
-        # data as stale and passes human control through unchanged.  The fallback
-        # straight lane (y=0, ±0.5 m) has no relation to the real track and must
-        # never drive safety decisions.
-        if self.lane_context.is_fallback:
-            self.get_logger().error(
-                "Lane map not loaded — safety monitor publishing suppressed until map is ready.",
-                throttle_duration_sec=5.0,
-            )
-            return
-
         try:
-            traj = np.array(self.last_traj_data, dtype=float).reshape(
-                self.params.horizon_H + 1, 5
-            )
-        except Exception:
-            self.get_logger().warn("Malformed backup_traj message — wrong number of floats?")
-            return
-
-        try:
+            state = self.last_state.copy()
+            p = self.params
+            now = self.get_clock().now().nanoseconds * 1e-9
             obstacles = self.static_memory.get(now)
-            ctx = MarginContext(self.lane_context, obstacles, self.traffic, self.params)
+            lane = self.lane_context
 
-            # Publish per-component margins at the CURRENT state for debugging.
-            from ece346.cbf_filter.cbf_filter.margins  import margin_components
-            comps = margin_components(state, ctx)
-            dm = Float64MultiArray()
-            dm.data = [comps["lane"], comps["obstacle"], comps["traffic"], comps["kinematic"]]
-            self.debug_margins_pub.publish(dm)
+            # Current-state margins.
+            m_lane = margin_lane(state, lane, p)
+            m_obs = margin_obstacle(state, obstacles, p)
+            m_traf = margin_obstacle(state, self.traffic, p, p.r_safe_traf)
 
-            # Evaluate margin at every state in the backup trajectory.
-            margins = []
-            labels = []
-            for s in traj:
-                val, lbl = margin_total(s, ctx)
-                margins.append(val)
-                labels.append(lbl)
+            # 10-step coast-ahead lookahead: no throttle, no steering change.
+            u_coast = np.array([0.0, 0.0])
+            x = state.copy()
+            lookahead_min = min(m_lane, m_obs, m_traf)
+            for _ in range(p.horizon_H):
+                x = step(x, u_coast, p)
+                lk = min(
+                    margin_lane(x, lane, p),
+                    margin_obstacle(x, obstacles, p),
+                    margin_obstacle(x, self.traffic, p, p.r_safe_traf),
+                )
+                lookahead_min = min(lookahead_min, lk)
 
-            h_imp = float(min(margins))
-            binding = labels[int(np.argmin(margins))]
+            h = min(m_lane, m_obs, m_traf, lookahead_min)
 
-            # Gradient via finite differences.
-            # We perturb the CURRENT state (not the trajectory), re-run the
-            # H-step rollout from the perturbed state, and measure Δh_imp.
-            grad = self._gradient(state, h_imp, ctx)
+            # Binding constraint name.
+            components = {"lane": m_lane, "obstacle": m_obs, "traffic": m_traf}
+            binding = min(components, key=components.get)
 
-            # Control gradient: ∂h_imp/∂u through the H-step rollout.
-            # h_backup0 = barrier starting from f(x, u0) — min over traj[1:].
-            h_backup0 = float(min(margins[1:])) if len(margins) > 1 else h_imp
-            u0 = brake_and_recenter(state, self.lane_context, self.params)
-            g_ctrl = self._control_gradient(state, h_backup0, u0, ctx)
+            # Publish.
+            v_msg = Float32()
+            v_msg.data = float(h)
+            self.value_pub.publish(v_msg)
 
-            self._publish(h_imp, grad, binding, margins, g_ctrl, h_backup0)
+            d_msg = Float64MultiArray()
+            d_msg.data = [float(m_lane), float(m_obs), float(m_traf), float(lookahead_min)]
+            self.debug_pub.publish(d_msg)
+
+            b_msg = String()
+            b_msg.data = binding
+            self.binding_pub.publish(b_msg)
 
         except Exception:
             self.get_logger().error(f"safety_monitor fault:\n{traceback.format_exc()}")
 
-    def _gradient(self, state: np.ndarray, h0: float, ctx: MarginContext) -> np.ndarray:
-        """Finite-difference ∇h_imp — 5 extra rollouts."""
-        grad = np.zeros(5, dtype=float)
-        lane = self.lane_context
-        p = self.params
-        for i in range(5):
-            x_pert = state.copy()
-            x_pert[i] += p.grad_eps
-            traj_pert = rollout(x_pert, lambda x: brake_and_recenter(x, lane, p), p)
-            h_pert = min(margin_total(s, ctx)[0] for s in traj_pert)
-            grad[i] = (h_pert - h0) / p.grad_eps
-        return grad
-
-    def _control_gradient(
-        self, state: np.ndarray, h_backup0: float, u0: np.ndarray, ctx: MarginContext
-    ) -> np.ndarray:
-        """
-        Finite-difference ∂h_imp/∂u — 2 extra rollouts, one per control dim.
-
-        Perturbs each of [a, omega] by eps=1.0, applies the perturbed control
-        for one step, then runs the backup policy for H steps from there.
-        This captures the full multi-step effect of control on the barrier,
-        unlike B^T ∇h which only sees the 1-step algebraic coupling.
-        """
-        lane = self.lane_context
-        p = self.params
-        policy = lambda s: brake_and_recenter(s, lane, p)
-        eps = 1.0
-        g_ctrl = np.zeros(2, dtype=float)
-        for i in range(2):
-            du = np.zeros(2)
-            du[i] = eps
-            x1 = step(state, u0 + du, p)
-            traj_p = rollout(x1, policy, p)
-            h_p = float(min(margin_total(s, ctx)[0] for s in traj_p))
-            g_ctrl[i] = (h_p - h_backup0) / eps
-        return g_ctrl
-
-    # ---- Lane context ----
-
     def _maybe_rebuild_lane(self, state: np.ndarray):
         p = state[:2]
         if self.last_lane_center is not None:
-            if (np.linalg.norm(p - self.last_lane_center) < self.params.lane_context_rebuild_distance_m
-                    and abs((state[3] - self.last_lane_yaw + np.pi) % (2 * np.pi) - np.pi)
-                    < self.params.lane_context_rebuild_yaw_rad):
+            dist_ok = (
+                np.linalg.norm(p - self.last_lane_center)
+                < self.params.lane_context_rebuild_distance_m
+            )
+            yaw_ok = (
+                abs((state[3] - self.last_lane_yaw + np.pi) % (2 * np.pi) - np.pi)
+                < self.params.lane_context_rebuild_yaw_rad
+            )
+            if dist_ok and yaw_ok:
                 return
         try:
             self.lane_context = self.lane_builder.build_near(state)
@@ -251,41 +165,6 @@ class SafetyMonitorNode(Node):
             self.last_lane_yaw = float(state[3])
         except Exception as e:
             self.get_logger().warn(f"lane rebuild failed: {e}")
-
-    # ---- Publishers ----
-
-    def _publish(
-        self,
-        h_imp: float,
-        grad: np.ndarray,
-        binding: str,
-        margins: list,
-        g_ctrl: np.ndarray,
-        h_backup0: float,
-    ):
-        v = Float32()
-        v.data = h_imp
-        self.value_pub.publish(v)
-
-        g = Float64MultiArray()
-        g.data = [float(x) for x in grad]
-        self.grad_pub.publish(g)
-
-        b = String()
-        b.data = binding
-        self.binding_pub.publish(b)
-
-        m = Float64MultiArray()
-        m.data = [float(x) for x in margins]
-        self.margins_pub.publish(m)
-
-        gc = Float64MultiArray()
-        gc.data = [float(x) for x in g_ctrl]
-        self.grad_control_pub.publish(gc)
-
-        hb = Float32()
-        hb.data = h_backup0
-        self.h_backup_pub.publish(hb)
 
 
 def main(args=None):
