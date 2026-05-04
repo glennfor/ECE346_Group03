@@ -43,12 +43,12 @@ safety_filter_node:
     qp_R_omega: 1.0               # QP penalty on changing human steering-rate input.
     grad_eps: 0.001               # Finite-difference step for estimating the CBF gradient.
     exact_safety_check: true      # Re-simulate candidate control and reject it if h gets worse.
-    hysteresis_cycles: 5          # Keep override active briefly after intervention starts.
-    passthrough_tolerance: 0.001  # Difference below this is treated as unchanged human input.
+    hysteresis_cycles: 15         # Keep override active briefly after intervention starts.
+    passthrough_tolerance: 0.05   # Difference below this is treated as unchanged human input.
     stale_timeout_s: 0.5          # Fall back if odom or human command is older than this.
     recovery_h_improvement: 0.001 # Minimum h improvement needed to allow unsafe-state recovery.
     lane_change_cost: 1.0         # Penalty for selecting a lane-change route from Lanelet2.
-    lane_context_rebuild_distance_m: 0.25 # Rebuild lane geometry after this position change.
+    lane_context_rebuild_distance_m: 0.5  # Rebuild lane geometry after this position change.
     lane_context_rebuild_yaw_rad: 0.35    # Rebuild lane geometry after this heading change.
 
 joy_node:
