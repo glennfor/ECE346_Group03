@@ -1,19 +1,23 @@
 #!/usr/bin/env python3
 """
-safety_monitor_node — simple heuristic safety monitor.
+safety_monitor_node — heuristic safety monitor.
 
 Computes a scalar safety value h at the current truck state and over a
-10-step lookahead using the human's current intended command (not coast):
+forward lookahead.  Two rollouts are evaluated and the minimum is published:
 
-  h >= 0  →  truck is safe (positive clearance from lane + obstacles)
-  h <  0  →  truck has violated a safety margin
+  h_backup  — rollout under the backup policy (max brake + steer to center).
+              This is the theoretically correct backup-CBF value: it answers
+              "if we switch to the backup policy right now, do we stay safe?"
+  h_human   — rollout under the human's current command, kept to avoid
+              false triggers at bends where h_backup can be pessimistic.
 
-Using the human command for the lookahead means the filter does NOT fire at
-bends just because the truck hasn't turned yet — it fires only if the human's
-own intended trajectory would be unsafe.
+h = min(h_backup, h_human) is published so both conditions must hold.
+
+  h >= 0  →  safe
+  h <  0  →  violated a safety margin
 
 Published topics:
-  /safety/value              Float32           — h (min margin over current + lookahead)
+  /safety/value              Float32           — h
   /safety/debug_margins      Float64MultiArray — [lane, obstacle, traffic, lookahead_min]
   /safety/binding_constraint String            — which margin is binding
 """
@@ -58,6 +62,7 @@ class SafetyMonitorNode(Node):
         self.delta_estimate = 0.0
         self.last_state: np.ndarray = None
         self.last_human_msg = None
+        self.last_backup_u0: np.ndarray = None
         self.traffic: list = []
         self.last_lane_center: np.ndarray = None
         self.last_lane_yaw: float = None
@@ -89,6 +94,9 @@ class SafetyMonitorNode(Node):
         self.create_subscription(
             ServoMsg, self.params.filtered_control_topic, self._control_cb, 10
         )
+        self.create_subscription(
+            Float64MultiArray, "/safety/backup_u0", self._backup_u0_cb, 1
+        )
 
         self.value_pub = self.create_publisher(Float32, "/safety/value", 1)
         self.debug_pub = self.create_publisher(Float64MultiArray, "/safety/debug_margins", 1)
@@ -103,6 +111,10 @@ class SafetyMonitorNode(Node):
 
     def _human_cb(self, msg: ServoMsg):
         self.last_human_msg = msg
+
+    def _backup_u0_cb(self, msg: Float64MultiArray):
+        if len(msg.data) == 2:
+            self.last_backup_u0 = np.array(msg.data, dtype=float)
 
     def _control_cb(self, msg: ServoMsg):
         p = self.params
@@ -147,28 +159,50 @@ class SafetyMonitorNode(Node):
             m_lane = margin_lane(state, lane, p)
             m_obs = margin_obstacle(state, obstacles, p)
             m_traf = margin_obstacle(state, self.traffic, p, p.r_safe_traf)
+            current_min = min(m_lane, m_obs, m_traf)
 
-            # 10-step lookahead using the human's current command.
-            # This prevents false triggers at bends: if the human is turning
-            # into the bend, the projected path follows the bend safely.
-            # Fall back to coast [0, 0] only if no human command is available.
-            if self.last_human_msg is not None:
-                u_lookahead = servo_msg_to_control(self.last_human_msg, state, p)
-            else:
-                u_lookahead = np.array([0.0, 0.0])
+            # Dynamic horizon: must cover at least the full stopping distance.
+            # Stopping time from speed v under max brake = v / |a_min|.
+            # Fixed horizon_H is used as the minimum so slow-speed behavior is unchanged.
+            v_now = float(state[2])
+            H = max(p.horizon_H, int(np.ceil(v_now / (abs(p.a_min) * p.dt))) + 1)
 
+            # Backup-policy rollout: the theoretically correct h_imp value.
+            # "If we switch to the backup policy right now, do we stay safe?"
+            # Uses the last published backup command; falls back to max-brake coast.
+            u_backup = self.last_backup_u0 if self.last_backup_u0 is not None else np.array([p.a_min, 0.0])
             x = state.copy()
-            lookahead_min = min(m_lane, m_obs, m_traf)
-            for _ in range(p.horizon_H):
-                x = step(x, u_lookahead, p)
+            lookahead_backup = current_min
+            for _ in range(H):
+                x = step(x, u_backup, p)
                 lk = min(
                     margin_lane(x, lane, p),
                     margin_obstacle(x, obstacles, p),
                     margin_obstacle(x, self.traffic, p, p.r_safe_traf),
                 )
-                lookahead_min = min(lookahead_min, lk)
+                lookahead_backup = min(lookahead_backup, lk)
 
-            h = min(m_lane, m_obs, m_traf, lookahead_min)
+            # Human-command rollout: kept to avoid false triggers at bends.
+            # If the human is steering into a bend, the backup rollout (which
+            # steers to center) can be pessimistic — the human's path is safer.
+            if self.last_human_msg is not None:
+                u_human = servo_msg_to_control(self.last_human_msg, state, p)
+            else:
+                u_human = np.array([0.0, 0.0])
+            x = state.copy()
+            lookahead_human = current_min
+            for _ in range(H):
+                x = step(x, u_human, p)
+                lk = min(
+                    margin_lane(x, lane, p),
+                    margin_obstacle(x, obstacles, p),
+                    margin_obstacle(x, self.traffic, p, p.r_safe_traf),
+                )
+                lookahead_human = min(lookahead_human, lk)
+
+            # Both conditions must hold: backup feasibility AND human-path safety.
+            lookahead_min = min(lookahead_backup, lookahead_human)
+            h = min(current_min, lookahead_min)
 
             components = {
                 "lane": m_lane,

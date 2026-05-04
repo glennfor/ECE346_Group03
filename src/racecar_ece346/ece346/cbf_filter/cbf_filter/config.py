@@ -40,10 +40,13 @@ class CbfParams:
     r_safe_traf: float = 0.06    # buffer for dynamic traffic
 
     # ---- Safety filter thresholds ----
-    # Steering blends toward backup when 0 <= h < throttle_cap_margin; forward throttle is
-    # blocked only when h < 0 (see filter node). Larger margin = earlier lateral nudge.
+    # throttle_cap_margin is the minimum geometric margin; the filter also computes
+    # a speed-dependent stopping distance and uses whichever is larger.
     throttle_cap_margin: float = 0.12
     steer_blend_lpf_tau_s: float = 0.10  # EMA on blended ω during intervention (0 = off)
+    # CBF rate condition: ḣ + γ·h ≥ 0. Larger γ = earlier response to a falling h.
+    # Typical range 1.0–5.0; too large causes chattering, too small gives a slow response.
+    cbf_rate_gamma: float = 2.0
 
     # ---- Lane graph / route stability ----
     lane_allow_lane_change: bool = True  # False can yield empty routes; True matches original map API

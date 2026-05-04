@@ -51,6 +51,7 @@ class SafetyFilterNode(Node):
         self.last_human_msg = None
         self.last_human_time: float = None
         self.last_h: float = None
+        self.prev_h: float = None       # h from the previous cycle, for rate estimation
         self.last_safety_time: float = None
         self.last_backup_u0: np.ndarray = None
         self._omega_blend_prev = 0.0
@@ -81,6 +82,7 @@ class SafetyFilterNode(Node):
         self.last_human_time = self.get_clock().now().nanoseconds * 1e-9
 
     def _value_cb(self, msg: Float32):
+        self.prev_h = self.last_h
         self.last_h = float(msg.data)
         self.last_safety_time = self.get_clock().now().nanoseconds * 1e-9
 
@@ -130,19 +132,43 @@ class SafetyFilterNode(Node):
     def _filter(self, state: np.ndarray, u_human: np.ndarray):
         h = self.last_h
         p = self.params
+        v = float(state[2])
+
+        # Minimum clearance needed to stop from current speed.
+        # At v m/s with a_min deceleration: d_stop = v² / (2·|a_min|).
+        # The intervention threshold must cover this distance or the backup
+        # policy physically cannot stop the truck before the boundary.
+        stopping_dist = v * v / (2.0 * abs(p.a_min)) + p.r_safe_lane
+        effective_margin = max(p.throttle_cap_margin, stopping_dist)
 
         backup_omega = float(self.last_backup_u0[1]) if self.last_backup_u0 is not None else 0.0
 
-        if h >= p.throttle_cap_margin:
+        # CBF rate check: enforce ḣ + γ·h ≥ 0 (discrete: h_next ≥ h·(1 - γ·dt)).
+        # If h is still positive but dropping faster than allowed, the current
+        # command is violating the CBF invariance condition even before h crosses
+        # zero. Force the backup immediately rather than waiting for h < 0.
+        cbf_rate_violated = False
+        if self.prev_h is not None and h > 0:
+            h_dot = (h - self.prev_h) / p.dt
+            gamma = p.cbf_rate_gamma
+            if h_dot + gamma * h < 0:
+                cbf_rate_violated = True
+
+        if not cbf_rate_violated and h >= effective_margin:
             self._omega_blend_prev = float(u_human[1])
             return u_human.copy(), False
 
-        a_out = float(u_human[0])
-        if h < 0:
+        if cbf_rate_violated or h < 0:
             a_out = min(u_human[0], 0.0)
             omega_raw = backup_omega
         else:
-            alpha = h / p.throttle_cap_margin
+            # Blend both throttle and steering proportionally so the truck
+            # cannot accelerate into danger while the filter is active.
+            alpha = h / effective_margin
+            a_out = float(np.clip(
+                (1.0 - alpha) * p.a_min + alpha * u_human[0],
+                p.a_min, p.a_max,
+            ))
             omega_raw = (1.0 - alpha) * backup_omega + alpha * float(u_human[1])
 
         tau = p.steer_blend_lpf_tau_s
