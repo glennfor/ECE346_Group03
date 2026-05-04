@@ -25,17 +25,22 @@ backup_planner_node:
     dt: 0.05
     horizon_H: 10
 
-    K_e: 3.0
-    K_p: 10.0
+    K_e: 2.5
+    K_p: 6.0
     v_eps: 0.3
+    backup_omega_lpf_tau_s: 0.08
 
     r_safe_obs: 0.03
+
+    filtered_control_topic: /control
 
     obstacle_radius_default: 0.06
     obstacle_memory_ttl_s: 1.0
     obstacle_memory_growth: 0.5
 
     lane_change_cost: 1.0
+    lane_allow_lane_change: false
+    route_hysteresis_rad: 0.25
     lane_context_rebuild_distance_m: 0.5
     lane_context_rebuild_yaw_rad: 0.5
 
@@ -70,7 +75,12 @@ safety_monitor_node:
 
     stale_timeout_s: 0.3
 
+    filtered_control_topic: /control
+    fallback_h_safe: 1000.0
+
     lane_change_cost: 1.0
+    lane_allow_lane_change: false
+    route_hysteresis_rad: 0.25
     lane_context_rebuild_distance_m: 0.5
     lane_context_rebuild_yaw_rad: 0.5
 
@@ -96,7 +106,8 @@ safety_filter_qp_node:
 
     # throttle_cap_margin: distance (m) below which steering blend + throttle cap kicks in.
     # Wider = more warning distance before full backup fires.
-    throttle_cap_margin: 0.10
+    throttle_cap_margin: 0.12
+    steer_blend_lpf_tau_s: 0.10
 
     # enable_qp=false → passthrough (joystick drives directly).
     enable_qp: true

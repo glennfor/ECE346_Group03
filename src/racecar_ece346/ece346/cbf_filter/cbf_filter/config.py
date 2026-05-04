@@ -29,9 +29,10 @@ class CbfParams:
     control_rate_hz: float = 20.0
 
     # ---- Heuristic backup policy (brake + steer toward center) ----
-    K_e: float = 3.0             # cross-track error gain
-    K_p: float = 10.0            # steering rate proportional gain
+    K_e: float = 2.5             # cross-track error gain (tuned for stability)
+    K_p: float = 6.0             # steering-angle P gain on omega (lower → less sway)
     v_eps: float = 0.3           # prevents division by zero at low speed
+    backup_omega_lpf_tau_s: float = 0.08  # low-pass ω backup (0 = off)
 
     # ---- Safety margins ----
     r_safe_lane: float = 0.01    # buffer beyond geometric clearance for lane
@@ -39,7 +40,15 @@ class CbfParams:
     r_safe_traf: float = 0.06    # buffer for dynamic traffic
 
     # ---- Safety filter thresholds ----
-    throttle_cap_margin: float = 0.10  # cap throttle + blend steering when h < this but h >= 0
+    throttle_cap_margin: float = 0.12  # cap throttle + blend steering when h < this but h >= 0
+    steer_blend_lpf_tau_s: float = 0.10  # EMA on blended ω during intervention (0 = off)
+
+    # ---- Lane graph / route stability ----
+    lane_allow_lane_change: bool = False  # False reduces centerline jumps at merges
+    route_hysteresis_rad: float = 0.25    # keep prior route if still near-optimal by this heading gap
+
+    # ---- Monitor fallback (map not loaded) ----
+    fallback_h_safe: float = 1.0e3  # published h when LaneContext.is_fallback (avoid bogus interventions)
 
     # ---- Obstacle memory ----
     obstacle_radius_default: float = 0.06

@@ -64,7 +64,11 @@ class SafetyMonitorNode(Node):
 
         self.lane_context: LaneContext = LaneContext.fallback_straight()
         self.lane_builder = LaneletContextBuilder(
-            self.params.map_file, self, self.params.lane_change_cost
+            self.params.map_file,
+            self,
+            self.params.lane_change_cost,
+            self.params.lane_allow_lane_change,
+            self.params.route_hysteresis_rad,
         )
         self.static_memory = ObstacleMemory(
             self.params.obstacle_memory_ttl_s,
@@ -82,6 +86,9 @@ class SafetyMonitorNode(Node):
         self.create_subscription(
             OdometryArray, self.params.dynamic_obstacles_topic, self._dynamic_cb, 10
         )
+        self.create_subscription(
+            ServoMsg, self.params.filtered_control_topic, self._control_cb, 10
+        )
 
         self.value_pub = self.create_publisher(Float32, "/safety/value", 1)
         self.debug_pub = self.create_publisher(Float64MultiArray, "/safety/debug_margins", 1)
@@ -96,6 +103,12 @@ class SafetyMonitorNode(Node):
 
     def _human_cb(self, msg: ServoMsg):
         self.last_human_msg = msg
+
+    def _control_cb(self, msg: ServoMsg):
+        p = self.params
+        self.delta_estimate = float(np.clip(msg.steer, p.delta_min, p.delta_max))
+        if self.last_state is not None:
+            self.last_state[4] = self.delta_estimate
 
     def _static_cb(self, msg: MarkerArray):
         t = self.get_clock().now().nanoseconds * 1e-9
@@ -115,6 +128,20 @@ class SafetyMonitorNode(Node):
             now = self.get_clock().now().nanoseconds * 1e-9
             obstacles = self.static_memory.get(now)
             lane = self.lane_context
+
+            if lane.is_fallback:
+                h = float(p.fallback_h_safe)
+                binding = "fallback_map"
+                v_msg = Float32()
+                v_msg.data = h
+                self.value_pub.publish(v_msg)
+                d_msg = Float64MultiArray()
+                d_msg.data = [h, 100.0, 100.0, h]
+                self.debug_pub.publish(d_msg)
+                b_msg = String()
+                b_msg.data = binding
+                self.binding_pub.publish(b_msg)
+                return
 
             # Current-state margins.
             m_lane = margin_lane(state, lane, p)
@@ -143,8 +170,12 @@ class SafetyMonitorNode(Node):
 
             h = min(m_lane, m_obs, m_traf, lookahead_min)
 
-            # Binding constraint name.
-            components = {"lane": m_lane, "obstacle": m_obs, "traffic": m_traf}
+            components = {
+                "lane": m_lane,
+                "obstacle": m_obs,
+                "traffic": m_traf,
+                "lookahead": lookahead_min,
+            }
             binding = min(components, key=components.get)
 
             # Publish.

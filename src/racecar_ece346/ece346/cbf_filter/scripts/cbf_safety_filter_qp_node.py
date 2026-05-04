@@ -54,6 +54,7 @@ class SafetyFilterNode(Node):
         self.last_h: float = None
         self.last_safety_time: float = None
         self.last_backup_u0: np.ndarray = None
+        self._omega_blend_prev = 0.0
 
         self._setup_io()
         self.timer = self.create_timer(1.0 / self.params.control_rate_hz, self._step)
@@ -131,27 +132,25 @@ class SafetyFilterNode(Node):
         h = self.last_h
         p = self.params
 
-        # Backup steering omega (direction toward lane center from backup planner).
         backup_omega = float(self.last_backup_u0[1]) if self.last_backup_u0 is not None else 0.0
 
+        if h >= p.throttle_cap_margin:
+            self._omega_blend_prev = float(u_human[1])
+            return u_human.copy(), False
+
+        a_out = min(u_human[0], 0.0)
         if h < 0:
-            # Unsafe: override steering toward center, block forward acceleration.
-            # Do NOT force hard braking here. The bicycle model needs forward speed
-            # to rotate (dpsi = v*tan(delta)/L), so braking to a stop would prevent
-            # the steering correction from working. Let the human brake if they want.
-            a_out = min(u_human[0], 0.0)
-            return np.array([a_out, backup_omega]), True
-
-        if h < p.throttle_cap_margin:
-            # Cap zone: block forward acceleration, blend steering toward backup.
-            # alpha=0 at h=0 (full backup steer), alpha=1 at h=margin (full human steer).
+            omega_raw = backup_omega
+        else:
             alpha = h / p.throttle_cap_margin
-            omega_blend = (1.0 - alpha) * backup_omega + alpha * float(u_human[1])
-            a_out = min(u_human[0], 0.0)
-            return np.array([a_out, omega_blend]), True
+            omega_raw = (1.0 - alpha) * backup_omega + alpha * float(u_human[1])
 
-        # Safe: pass through unchanged.
-        return u_human.copy(), False
+        tau = p.steer_blend_lpf_tau_s
+        if tau > 0.0:
+            b = p.dt / (tau + p.dt)
+            omega_raw = b * omega_raw + (1.0 - b) * self._omega_blend_prev
+        self._omega_blend_prev = omega_raw
+        return np.array([a_out, omega_raw]), True
 
     def _publish(self, u: np.ndarray, state: np.ndarray, override: bool, u_human):
         stamp = self.get_clock().now().to_msg()

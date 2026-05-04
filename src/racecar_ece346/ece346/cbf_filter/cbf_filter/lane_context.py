@@ -8,7 +8,7 @@ It rebuilds when the truck moves more than lane_context_rebuild_distance_m
 (default 0.5 m) or turns more than lane_context_rebuild_yaw_rad (default 0.5 rad).
 """
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 import numpy as np
 
@@ -99,14 +99,31 @@ def heading_error_to_lane(x: np.ndarray, lane: LaneContext) -> Tuple[float, Lane
     return wrap_angle(sample.tangent - float(x[3])), sample
 
 
+def _route_fingerprint(route: Any) -> Optional[Tuple]:
+    r = np.asarray(route, dtype=float)
+    if r.shape[0] < 2:
+        return None
+    return (int(r.shape[0]), float(r[0, 0]), float(r[0, 1]), float(r[1, 0]), float(r[1, 1]))
+
+
 class LaneletContextBuilder:
     """Wraps the racecar_routing LaneletWrapper into a LaneContext."""
 
-    def __init__(self, map_file: str, node: Optional[object] = None, lane_change_cost: float = 1.0):
+    def __init__(
+        self,
+        map_file: str,
+        node: Optional[object] = None,
+        lane_change_cost: float = 1.0,
+        allow_lane_change: bool = False,
+        route_hysteresis_rad: float = 0.25,
+    ):
         self.map_file = map_file
         self.node = node
         self.lane_change_cost = lane_change_cost
+        self.allow_lane_change = allow_lane_change
+        self.route_hysteresis_rad = route_hysteresis_rad
         self._wrapper = None
+        self._last_route_fingerprint: Optional[Tuple] = None
 
     def _load(self):
         if self._wrapper is not None:
@@ -124,29 +141,47 @@ class LaneletContextBuilder:
         lanelet, arc = wrapper.get_closest_lanelet(pose, check_psi=True)
         L = max(wrapper.get_lanelet_length(lanelet), 1e-6)
         start_s = getattr(arc, "length", 0.0) / L
-        routes = wrapper.get_reachable_path(lanelet, start_s, distance_m, allow_lane_change=True)
+        alc = self.allow_lane_change
+        routes = wrapper.get_reachable_path(lanelet, start_s, distance_m, allow_lane_change=alc)
 
         centerline = self._pick_route(routes, state)
         wl, wr = [], []
         for x, y in centerline:
             nl, _ = wrapper.get_closest_lanelet([x, y], check_psi=False)
             pt = type("P", (), {"x": float(x), "y": float(y)})()
-            left, right = wrapper.get_lane_width(pt, nl, allow_lane_change=True)
+            left, right = wrapper.get_lane_width(pt, nl, allow_lane_change=alc)
             wl.append(left)
             wr.append(right)
 
         return LaneContext.from_centerline(centerline, np.array(wl), np.array(wr))
 
-    @staticmethod
-    def _pick_route(routes, state: np.ndarray) -> np.ndarray:
+    def _pick_route(self, routes: List, state: np.ndarray) -> np.ndarray:
         if not routes:
-            return np.array([[state[0], state[1]], [state[0] + 1.0, state[1]]], dtype=float)
+            arr = np.array([[state[0], state[1]], [state[0] + 1.0, state[1]]], dtype=float)
+            self._last_route_fingerprint = _route_fingerprint(arr)
+            return arr
         heading = float(state[3]) if len(state) >= 4 else 0.0
 
-        def score(r):
+        def seg_score(r):
             if len(r) < 2:
                 return float("inf")
             seg = np.asarray(r[1]) - np.asarray(r[0])
             return abs(wrap_angle(float(np.arctan2(seg[1], seg[0])) - heading))
 
-        return np.asarray(min(routes, key=score), dtype=float)
+        scored = [(seg_score(r), r) for r in routes if len(r) >= 2]
+        if not scored:
+            arr = np.array([[state[0], state[1]], [state[0] + 1.0, state[1]]], dtype=float)
+            self._last_route_fingerprint = _route_fingerprint(arr)
+            return arr
+        best_score, best_r = min(scored, key=lambda x: x[0])
+        chosen_r = best_r
+        if self._last_route_fingerprint is not None and self.route_hysteresis_rad > 0.0:
+            for sc, r in scored:
+                if sc > best_score + self.route_hysteresis_rad:
+                    continue
+                if _route_fingerprint(r) == self._last_route_fingerprint:
+                    chosen_r = r
+                    break
+        arr = np.asarray(chosen_r, dtype=float)
+        self._last_route_fingerprint = _route_fingerprint(arr)
+        return arr

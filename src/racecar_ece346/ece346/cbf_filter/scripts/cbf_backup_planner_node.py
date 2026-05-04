@@ -18,6 +18,8 @@ from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from std_msgs.msg import Float64MultiArray
 
+from racecar_msgs.msg import ServoMsg
+
 from ece346.cbf_filter.cbf_filter.config import CbfParams, declare_and_load
 from ece346.cbf_filter.cbf_filter.dynamics import wrap_angle
 from ece346.cbf_filter.cbf_filter.lane_context import LaneContext, LaneletContextBuilder
@@ -44,10 +46,18 @@ class BackupPlannerNode(Node):
 
         self.lane_context: LaneContext = LaneContext.fallback_straight()
         self.lane_builder = LaneletContextBuilder(
-            self.params.map_file, self, self.params.lane_change_cost
+            self.params.map_file,
+            self,
+            self.params.lane_change_cost,
+            self.params.lane_allow_lane_change,
+            self.params.route_hysteresis_rad,
         )
 
         self.create_subscription(Odometry, self.params.odom_topic, self._odom_cb, 10)
+        self.create_subscription(
+            ServoMsg, self.params.filtered_control_topic, self._control_cb, 10
+        )
+        self._omega_backup_prev = 0.0
         self.u0_pub = self.create_publisher(Float64MultiArray, "/safety/backup_u0", 1)
         self.timer = self.create_timer(1.0 / self.params.control_rate_hz, self._step)
         self.get_logger().info("backup_planner_node ready")
@@ -55,6 +65,12 @@ class BackupPlannerNode(Node):
     def _odom_cb(self, msg: Odometry):
         self.last_state = odom_to_state(msg, self.delta_estimate, self.params)
         self._maybe_rebuild_lane(self.last_state)
+
+    def _control_cb(self, msg: ServoMsg):
+        p = self.params
+        self.delta_estimate = float(np.clip(msg.steer, p.delta_min, p.delta_max))
+        if self.last_state is not None:
+            self.last_state[4] = self.delta_estimate
 
     def _step(self):
         if self.last_state is None:
@@ -74,6 +90,11 @@ class BackupPlannerNode(Node):
                 p.delta_max,
             )
             omega = float(np.clip(p.K_p * (delta_des - delta), p.omega_min, p.omega_max))
+            tau = p.backup_omega_lpf_tau_s
+            if tau > 0.0:
+                b = p.dt / (tau + p.dt)
+                omega = b * omega + (1.0 - b) * self._omega_backup_prev
+            self._omega_backup_prev = omega
 
             msg = Float64MultiArray()
             msg.data = [float(p.a_min), omega]

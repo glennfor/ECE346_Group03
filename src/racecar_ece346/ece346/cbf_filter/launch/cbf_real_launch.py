@@ -1,5 +1,5 @@
 """
-cbf_real_launch.py — CBF safety filter on the real truck.
+cbf_real_launch.py — Heuristic safety filter (margins + throttle cap + steer blend) on the real truck.
 
 Usage:
     # Start with passthrough to verify topics are live:

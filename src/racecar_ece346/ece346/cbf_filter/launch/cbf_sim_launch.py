@@ -1,26 +1,11 @@
 """
-cbf_sim_launch.py — full CBF safety filter in simulation.
+cbf_sim_launch.py — heuristic safety filter in simulation.
 
-Usage:
-    # Full system with QP intervention enabled:
-    ros2 launch racecar_ece346 cbf_sim_launch.py
-
-    # Watch safety value without any intervention (passthrough):
-    ros2 launch racecar_ece346 cbf_sim_launch.py enable_qp:=false
-
-    # Custom parameters:
-    ros2 launch racecar_ece346 cbf_sim_launch.py param_file:=/path/to/my.yaml
-
-    # Toggle intervention at runtime (no restart needed):
-    ros2 param set /safety_filter_qp_node enable_qp true
-
-Nodes launched:
-    simulator + traffic_simulation  (racecar_interface)
-    routing                         (racecar_routing)
-    joy_to_servo_node               joy → /human_control
-    backup_planner_node             /slam_pose → /safety/backup_traj + /safety/backup_u0
-    safety_monitor_node             trajectory + obstacles → /safety/value + /safety/grad
-    safety_filter_qp_node           human + safety value → /control
+Nodes:
+  simulator + traffic, routing, joy_to_servo
+  backup_planner_node      /slam_pose, /control → /safety/backup_u0
+  safety_monitor_node      margins + lookahead → /safety/value
+  safety_filter_qp_node    human + h + backup → /control (throttle cap + steer blend)
 """
 
 from launch import LaunchDescription
@@ -86,7 +71,7 @@ def generate_launch_description():
             parameters=[param_file],
         ),
 
-        # Node 2 — MONITOR: evaluate safety margins, compute h_imp + gradient
+        # Node 2 — MONITOR: margins + human lookahead → /safety/value
         Node(
             package="racecar_ece346",
             executable="cbf_safety_monitor_node.py",
@@ -95,7 +80,7 @@ def generate_launch_description():
             parameters=[param_file],
         ),
 
-        # Node 3 — INTERVENTIONER: CBF-QP, outputs /control
+        # Node 3 — Interventions: throttle cap + steer blend on /control
         Node(
             package="racecar_ece346",
             executable="cbf_safety_filter_qp_node.py",
