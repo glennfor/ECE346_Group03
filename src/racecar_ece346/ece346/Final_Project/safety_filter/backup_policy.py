@@ -9,6 +9,13 @@ def brake_and_recenter(x: np.ndarray, lane: LaneContext, params: SafetyFilterPar
     return recenter_control(x, lane, params, params.a_min)
 
 
+def emergency_brake(x: np.ndarray, params: SafetyFilterParams) -> np.ndarray:
+    _, _, v, _, delta = x
+    omega = np.clip(params.K_p * (0.0 - delta), params.omega_min, params.omega_max)
+    accel = 0.0 if v <= 0.02 else params.a_min
+    return clip_control(np.array([accel, omega], dtype=float), params)
+
+
 def lane_recovery_control(
     x: np.ndarray,
     lane: LaneContext,

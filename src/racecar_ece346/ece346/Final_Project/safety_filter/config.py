@@ -26,6 +26,8 @@ class SafetyFilterParams:
     r_safe_traf: float = 0.10
     r_safe_kin: float = 0.02
     lane_guard_margin_m: float = 0.05
+    obstacle_guard_margin_m: float = 0.35
+    traffic_guard_margin_m: float = 0.45
     lane_recovery_speed_mps: float = 0.2
     lane_recovery_accel_gain: float = 4.0
     obstacle_radius_default: float = 0.12

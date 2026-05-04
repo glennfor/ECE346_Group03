@@ -1,9 +1,10 @@
 import numpy as np
 
 from ece346.Final_Project.safety_filter.barrier import implicit_barrier_value
-from ece346.Final_Project.safety_filter.backup_policy import lane_recovery_control
+from ece346.Final_Project.safety_filter.backup_policy import emergency_brake, lane_recovery_control
 from ece346.Final_Project.safety_filter.config import SafetyFilterParams
 from ece346.Final_Project.safety_filter.dynamics import step
+from ece346.Final_Project.safety_filter.guards import select_hard_guard_control
 from ece346.Final_Project.safety_filter.lane_context import LaneContext, LaneletContextBuilder
 from ece346.Final_Project.safety_filter.margins import (
     MarginContext,
@@ -138,6 +139,29 @@ def test_lane_recovery_brakes_when_rolling_without_human_input():
 
     assert control[0] == params.a_min
     assert control[1] < 0.0
+
+
+def test_emergency_brake_stops_without_reversing_at_rest():
+    params = make_params()
+    x_stopped = np.array([0.0, 0.0, 0.0, 0.0, 0.2])
+
+    control = emergency_brake(x_stopped, params)
+
+    assert control[0] == 0.0
+    assert control[1] < 0.0
+
+
+def test_obstacle_guard_overrides_qp_with_emergency_brake():
+    params = make_params()
+    params.obstacle_guard_margin_m = 0.5
+    lane = make_lane()
+    state = np.array([0.0, 0.0, 0.6, 0.0, 0.0])
+    margins = {"lane": 1.0, "obstacle": 0.1, "traffic": 100.0, "kinematic": 1.0}
+
+    result = select_hard_guard_control(state, lane, margins, params, np.array([1.0, 0.0]))
+
+    assert result.status == "obstacle_guard_brake"
+    assert result.control[0] == params.a_min
 
 
 def test_barrier_detects_close_obstacle():

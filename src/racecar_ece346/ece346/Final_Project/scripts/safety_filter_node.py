@@ -11,11 +11,11 @@ from visualization_msgs.msg import MarkerArray
 
 from ece346.Final_Project.safety_filter.backup_policy import (
     brake_and_recenter,
-    lane_recovery_control,
 )
 from ece346.Final_Project.safety_filter.barrier import evaluate_barrier, implicit_barrier_value
 from ece346.Final_Project.safety_filter.config import declare_and_load
 from ece346.Final_Project.safety_filter.dynamics import control_jacobian, step
+from ece346.Final_Project.safety_filter.guards import select_hard_guard_control
 from ece346.Final_Project.safety_filter.lane_context import LaneContext, LaneletContextBuilder
 from ece346.Final_Project.safety_filter.margins import MarginContext, margin_components
 from ece346.Final_Project.safety_filter.obstacle_memory import ObstacleMemory
@@ -271,49 +271,57 @@ class SafetyFilterNode(Node):
             if odom_stale or human_stale:
                 u_filtered = brake_and_recenter(state, self.lane_context, self.params)
                 status = "fallback_stale"
-            elif component_margins["lane"] < self.params.lane_guard_margin_m:
-                u_filtered = lane_recovery_control(state, self.lane_context, self.params, u_human)
-                status = "lane_guard_recenter"
             else:
-                u_backup = brake_and_recenter(state, self.lane_context, self.params)
-                h_human_next = self._next_barrier_value(state, u_human, ctx)
-
-                f_human = step(state, u_human, self.params)
-                g = control_jacobian(self.params).T @ result.gradient
-                c = (
-                    -self.params.lambda_cbf * result.value
-                    - float(result.gradient @ (f_human - state))
-                    + float(g @ u_human)
+                guard = select_hard_guard_control(
+                    state,
+                    self.lane_context,
+                    component_margins,
+                    self.params,
+                    u_human,
                 )
-                qp_result = solve_box_halfspace_qp(u_human, g, c, self.params)
-                u_filtered = qp_result.control
-                status = qp_result.status
+                if guard.control is not None:
+                    u_filtered = guard.control
+                    status = guard.status
+                else:
+                    u_backup = brake_and_recenter(state, self.lane_context, self.params)
+                    h_human_next = self._next_barrier_value(state, u_human, ctx)
 
-                if result.value < 0.0 and h_human_next > result.value + self.params.recovery_h_improvement:
-                    u_filtered = u_human
-                    status = "recovery_human_improves_h"
-                elif status != "optimal":
-                    u_filtered, status = self._best_recovery_control(
-                        state,
-                        ctx,
-                        [
-                            (u_backup, "fallback_qp_infeasible"),
-                            (u_human, "recovery_human"),
-                        ],
+                    f_human = step(state, u_human, self.params)
+                    g = control_jacobian(self.params).T @ result.gradient
+                    c = (
+                        -self.params.lambda_cbf * result.value
+                        - float(result.gradient @ (f_human - state))
+                        + float(g @ u_human)
                     )
-                elif self.params.exact_safety_check:
-                    h_next = self._next_barrier_value(state, u_filtered, ctx)
-                    threshold = (1.0 - self.params.lambda_cbf) * result.value
-                    if h_next < threshold - 1e-6:
+                    qp_result = solve_box_halfspace_qp(u_human, g, c, self.params)
+                    u_filtered = qp_result.control
+                    status = qp_result.status
+
+                    if result.value < 0.0 and h_human_next > result.value + self.params.recovery_h_improvement:
+                        u_filtered = u_human
+                        status = "recovery_human_improves_h"
+                    elif status != "optimal":
                         u_filtered, status = self._best_recovery_control(
                             state,
                             ctx,
                             [
-                                (u_backup, "fallback_exact_check"),
-                                (u_filtered, "qp_exact_best_effort"),
+                                (u_backup, "fallback_qp_infeasible"),
                                 (u_human, "recovery_human"),
                             ],
                         )
+                    elif self.params.exact_safety_check:
+                        h_next = self._next_barrier_value(state, u_filtered, ctx)
+                        threshold = (1.0 - self.params.lambda_cbf) * result.value
+                        if h_next < threshold - 1e-6:
+                            u_filtered, status = self._best_recovery_control(
+                                state,
+                                ctx,
+                                [
+                                    (u_backup, "fallback_exact_check"),
+                                    (u_filtered, "qp_exact_best_effort"),
+                                    (u_human, "recovery_human"),
+                                ],
+                            )
 
             deviates = np.linalg.norm(u_filtered - u_human, ord=np.inf) > self.params.passthrough_tolerance
             if deviates:
