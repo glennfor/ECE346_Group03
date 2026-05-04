@@ -114,7 +114,7 @@ class LaneletContextBuilder:
         map_file: str,
         node: Optional[object] = None,
         lane_change_cost: float = 1.0,
-        allow_lane_change: bool = False,
+        allow_lane_change: bool = True,
         route_hysteresis_rad: float = 0.25,
     ):
         self.map_file = map_file
@@ -143,13 +143,22 @@ class LaneletContextBuilder:
         start_s = getattr(arc, "length", 0.0) / L
         alc = self.allow_lane_change
         routes = wrapper.get_reachable_path(lanelet, start_s, distance_m, allow_lane_change=alc)
+        width_alc = alc
+        if not routes:
+            # following(lanelet, False) can yield no successors — retry with lane changes
+            routes = wrapper.get_reachable_path(
+                lanelet, start_s, distance_m, allow_lane_change=True
+            )
+            width_alc = True
+        if not routes:
+            raise RuntimeError("get_reachable_path returned no routes")
 
         centerline = self._pick_route(routes, state)
         wl, wr = [], []
         for x, y in centerline:
             nl, _ = wrapper.get_closest_lanelet([x, y], check_psi=False)
             pt = type("P", (), {"x": float(x), "y": float(y)})()
-            left, right = wrapper.get_lane_width(pt, nl, allow_lane_change=alc)
+            left, right = wrapper.get_lane_width(pt, nl, allow_lane_change=width_alc)
             wl.append(left)
             wr.append(right)
 
@@ -157,9 +166,7 @@ class LaneletContextBuilder:
 
     def _pick_route(self, routes: List, state: np.ndarray) -> np.ndarray:
         if not routes:
-            arr = np.array([[state[0], state[1]], [state[0] + 1.0, state[1]]], dtype=float)
-            self._last_route_fingerprint = _route_fingerprint(arr)
-            return arr
+            raise ValueError("empty routes in _pick_route")
         heading = float(state[3]) if len(state) >= 4 else 0.0
 
         def seg_score(r):
@@ -170,9 +177,7 @@ class LaneletContextBuilder:
 
         scored = [(seg_score(r), r) for r in routes if len(r) >= 2]
         if not scored:
-            arr = np.array([[state[0], state[1]], [state[0] + 1.0, state[1]]], dtype=float)
-            self._last_route_fingerprint = _route_fingerprint(arr)
-            return arr
+            raise ValueError("no route with >= 2 centerline points")
         best_score, best_r = min(scored, key=lambda x: x[0])
         chosen_r = best_r
         if self._last_route_fingerprint is not None and self.route_hysteresis_rad > 0.0:

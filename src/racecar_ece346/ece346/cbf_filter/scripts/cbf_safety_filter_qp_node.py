@@ -5,14 +5,13 @@ safety_filter_qp_node — heuristic safety filter with smooth steering blend.
 Uses the safety value h from safety_monitor_node:
 
   h >= throttle_cap_margin  →  passthrough (human controls freely)
-  0 <= h < throttle_cap_margin  →  CAP ZONE
-      - throttle capped to 0 (no forward acceleration)
-      - steering blended: near margin edge → mostly human;
-                          near h=0 → mostly backup
-  h < 0  →  BACKUP (brake + backup steering fully overrides)
+  0 <= h < throttle_cap_margin  →  WARNING BAND
+      - full human throttle (still h >= 0 geometrically)
+      - steering blended toward backup (lateral nudge back to center)
+  h < 0  →  UNSAFE: throttle capped to non-positive; backup steering
 
-The steering blend in the cap zone means the filter nudges the truck back
-toward the lane center rather than suddenly locking out the human.
+The steering blend in the warning band nudges heading without blocking
+forward acceleration while margins are still non-negative.
 
 Published topics:
   /control           ServoMsg          — filtered command to truck
@@ -138,8 +137,9 @@ class SafetyFilterNode(Node):
             self._omega_blend_prev = float(u_human[1])
             return u_human.copy(), False
 
-        a_out = min(u_human[0], 0.0)
+        a_out = float(u_human[0])
         if h < 0:
+            a_out = min(u_human[0], 0.0)
             omega_raw = backup_omega
         else:
             alpha = h / p.throttle_cap_margin

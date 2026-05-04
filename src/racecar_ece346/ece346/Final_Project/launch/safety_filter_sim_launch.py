@@ -52,6 +52,14 @@ def generate_launch_description():
         parameters=[param_file],
     )
 
+    joy_node = Node(
+        package="joy",
+        executable="joy_node",
+        name="joy_node",
+        output="screen",
+        parameters=[param_file],
+    )
+
     safety_viz_node = Node(
         package="racecar_ece346",
         executable="safety_viz_node.py",
@@ -65,6 +73,7 @@ def generate_launch_description():
             declare_params,
             simulator_launch,
             routing_launch,
+            joy_node,
             joy_to_servo_node,
             safety_filter_node,
             safety_viz_node,

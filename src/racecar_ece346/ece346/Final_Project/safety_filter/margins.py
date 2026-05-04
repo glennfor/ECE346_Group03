@@ -25,6 +25,9 @@ def footprint_points(x: np.ndarray, params: SafetyFilterParams) -> List[np.ndarr
 
 
 def margin_lane(x: np.ndarray, lane: LaneContext, params: SafetyFilterParams) -> float:
+    if lane.is_fallback:
+        return 100.0
+
     margins = []
     for point in footprint_points(x, params):
         sample = lane.query(float(point[0]), float(point[1]))

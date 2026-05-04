@@ -58,8 +58,8 @@ ros2 param set /safety_filter_qp_node enable_qp true    # filter active
 ### `safety_filter_qp_node` (name kept for compatibility)
 
 - `h ≥ throttle_cap_margin`: passthrough.
-- `0 ≤ h < throttle_cap_margin`: **cap zone** — no forward acceleration (`a_out ≤ 0`), steering blends human `ω` toward backup `ω`; optional EMA: `steer_blend_lpf_tau_s`.
-- `h < 0`: same throttle cap, backup `ω` only.
+- `0 ≤ h < throttle_cap_margin`: **warning band** — full human throttle; steering blends toward backup; optional EMA `steer_blend_lpf_tau_s` on `ω`.
+- `h < 0`: forward acceleration capped to non-positive; backup `ω` only.
 
 ## Topics
 
@@ -78,7 +78,7 @@ ros2 param set /safety_filter_qp_node enable_qp true    # filter active
 
 | Parameter | Role |
 |-----------|------|
-| `throttle_cap_margin` | Below this (meters of margin), throttle capped and steering blended |
+| `throttle_cap_margin` | Below this (meters), steering blends toward backup while `h ≥ 0`; throttle capped only when `h < 0` |
 | `steer_blend_lpf_tau_s` | Low-pass on blended `ω` during intervention (`0` = off) |
 | `K_e`, `K_p`, `v_eps` | Backup lateral law |
 | `backup_omega_lpf_tau_s` | Low-pass on published backup `ω` |
@@ -90,7 +90,7 @@ ros2 param set /safety_filter_qp_node enable_qp true    # filter active
 ## Tuning
 
 - **Too much sway / chatter:** lower `K_p`, increase `backup_omega_lpf_tau_s` / `steer_blend_lpf_tau_s`, or increase `route_hysteresis_rad`.
-- **Cannot accelerate after intervention:** `h` still below `throttle_cap_margin` — check margins, map, and `/safety/binding_constraint`.
+- **Cannot accelerate after intervention:** `h < 0` (true violation) caps throttle — recover with steering / position; check `/safety/binding_constraint`.
 - **Tighter lane keeping:** slightly increase `throttle_cap_margin` or `r_safe_lane` (monitor).
 
 ## File layout

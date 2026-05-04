@@ -39,7 +39,7 @@ backup_planner_node:
     obstacle_memory_growth: 0.5
 
     lane_change_cost: 1.0
-    lane_allow_lane_change: false
+    lane_allow_lane_change: true
     route_hysteresis_rad: 0.25
     lane_context_rebuild_distance_m: 0.5
     lane_context_rebuild_yaw_rad: 0.5
@@ -79,7 +79,7 @@ safety_monitor_node:
     fallback_h_safe: 1000.0
 
     lane_change_cost: 1.0
-    lane_allow_lane_change: false
+    lane_allow_lane_change: true
     route_hysteresis_rad: 0.25
     lane_context_rebuild_distance_m: 0.5
     lane_context_rebuild_yaw_rad: 0.5

@@ -74,6 +74,15 @@ def test_lane_query_uses_segment_projection():
     assert sample.signed_lateral_error > 0.0
 
 
+def test_fallback_lane_does_not_constrain_control():
+    params = make_params()
+    lane = LaneContext.fallback_straight()
+    x_far_from_fake_lane = np.array([0.0, 10.0, 0.0, 0.0, 0.0])
+
+    assert lane.is_fallback
+    assert margin_lane(x_far_from_fake_lane, lane, params) == 100.0
+
+
 def test_lanelet_builder_extracts_yaw_from_full_state():
     state = np.array([1.0, 2.0, 4.0, 1.25, 0.1])
     lane_pose = LaneletContextBuilder._state_to_lane_pose(state)

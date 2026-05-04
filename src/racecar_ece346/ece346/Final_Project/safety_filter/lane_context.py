@@ -21,6 +21,7 @@ class LaneContext:
     width_left: np.ndarray
     width_right: np.ndarray
     tangent: np.ndarray
+    is_fallback: bool = False
 
     @classmethod
     def from_centerline(
@@ -28,6 +29,7 @@ class LaneContext:
         centerline: np.ndarray,
         width_left: np.ndarray,
         width_right: np.ndarray,
+        is_fallback: bool = False,
     ) -> "LaneContext":
         centerline = np.asarray(centerline, dtype=float)
         if centerline.shape[0] < 2:
@@ -40,14 +42,14 @@ class LaneContext:
             width_right = np.resize(width_right, centerline.shape[0])
         diffs = np.gradient(centerline, axis=0)
         tangent = np.arctan2(diffs[:, 1], diffs[:, 0])
-        return cls(centerline, width_left, width_right, tangent)
+        return cls(centerline, width_left, width_right, tangent, is_fallback)
 
     @classmethod
-    def fallback_straight(cls, width: float = 1.0) -> "LaneContext":
+    def fallback_straight(cls, width: float = 100.0) -> "LaneContext":
         xs = np.linspace(-20.0, 20.0, 200)
         centerline = np.column_stack([xs, np.zeros_like(xs)])
         half_width = np.full(xs.shape, width / 2.0)
-        return cls.from_centerline(centerline, half_width, half_width)
+        return cls.from_centerline(centerline, half_width, half_width, is_fallback=True)
 
     def query(self, px: float, py: float) -> LaneSample:
         p = np.array([px, py], dtype=float)
