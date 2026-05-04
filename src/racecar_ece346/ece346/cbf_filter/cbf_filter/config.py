@@ -25,7 +25,8 @@ class CbfParams:
 
     # ---- Discretization ----
     dt: float = 0.05
-    horizon_H: int = 10          # steps for the safety lookahead (H * dt = lookahead time)
+    horizon_H: int = 10          # minimum lookahead steps
+    horizon_H_max: int = 15      # cap: prevents h_backup from shrinking with speed
     control_rate_hz: float = 20.0
 
     # ---- Heuristic backup policy (brake + steer toward center) ----
@@ -87,4 +88,5 @@ def declare_and_load(node: Any, names: Iterable[str] = None) -> CbfParams:
         values[name] = node.get_parameter(name).value
 
     values["horizon_H"] = int(values["horizon_H"])
+    values["horizon_H_max"] = int(values["horizon_H_max"])
     return CbfParams(**values)

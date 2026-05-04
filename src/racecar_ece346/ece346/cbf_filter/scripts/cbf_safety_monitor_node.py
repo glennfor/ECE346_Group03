@@ -161,11 +161,13 @@ class SafetyMonitorNode(Node):
             m_traf = margin_obstacle(state, self.traffic, p, p.r_safe_traf)
             current_min = min(m_lane, m_obs, m_traf)
 
-            # Dynamic horizon: must cover at least the full stopping distance.
-            # Stopping time from speed v under max brake = v / |a_min|.
-            # Fixed horizon_H is used as the minimum so slow-speed behavior is unchanged.
+            # Dynamic horizon: covers stopping distance but capped at horizon_H_max.
+            # Uncapped growth causes h_backup to shrink monotonically with speed —
+            # a longer trajectory has more steps where margin can be small,
+            # keeping h permanently below throttle_cap_margin and trapping the truck.
             v_now = float(state[2])
-            H = max(p.horizon_H, int(np.ceil(v_now / (abs(p.a_min) * p.dt))) + 1)
+            H_stop = int(np.ceil(v_now / (abs(p.a_min) * p.dt))) + 1
+            H = max(p.horizon_H, min(H_stop, p.horizon_H_max))
 
             # Backup-policy rollout: the theoretically correct h_imp value.
             # "If we switch to the backup policy right now, do we stay safe?"
