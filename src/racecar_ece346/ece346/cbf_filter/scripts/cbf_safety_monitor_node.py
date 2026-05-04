@@ -34,7 +34,7 @@ from visualization_msgs.msg import MarkerArray
 from racecar_msgs.msg import OdometryArray, ServoMsg
 
 from ece346.cbf_filter.cbf_filter.config import CbfParams, declare_and_load
-from ece346.cbf_filter.cbf_filter.dynamics import step
+from ece346.cbf_filter.cbf_filter.dynamics import step, wrap_angle
 from ece346.cbf_filter.cbf_filter.lane_context import LaneContext, LaneletContextBuilder
 from ece346.cbf_filter.cbf_filter.margins import margin_lane, margin_obstacle
 from ece346.cbf_filter.cbf_filter.obstacle_memory import ObstacleMemory
@@ -169,12 +169,13 @@ class SafetyMonitorNode(Node):
 
             # Backup-policy rollout: the theoretically correct h_imp value.
             # "If we switch to the backup policy right now, do we stay safe?"
-            # Uses the last published backup command; falls back to max-brake coast.
-            u_backup = self.last_backup_u0 if self.last_backup_u0 is not None else np.array([p.a_min, 0.0])
+            # The policy is recomputed at every step so the trajectory correctly
+            # tracks lane curves — a frozen omega from the start would cut across
+            # bends and give a systematically pessimistic h_backup.
             x = state.copy()
             lookahead_backup = current_min
             for _ in range(H):
-                x = step(x, u_backup, p)
+                x = step(x, self._backup_policy(x), p)
                 lk = min(
                     margin_lane(x, lane, p),
                     margin_obstacle(x, obstacles, p),
@@ -227,6 +228,25 @@ class SafetyMonitorNode(Node):
 
         except Exception:
             self.get_logger().error(f"safety_monitor fault:\n{traceback.format_exc()}")
+
+    def _backup_policy(self, x: np.ndarray) -> np.ndarray:
+        """Compute the backup policy command at state x, querying lane at x.
+
+        Mirrors cbf_backup_planner_node logic exactly: max brake + proportional
+        steer toward lane center. Recomputing at each rollout step means the
+        backup trajectory correctly follows lane curves instead of using a
+        stale omega from the rollout starting point.
+        """
+        p = self.params
+        _, _, v, _, delta = x
+        sample = self.lane_context.query(float(x[0]), float(x[1]))
+        heading_err = wrap_angle(sample.tangent - float(x[3]))
+        delta_des = float(np.clip(
+            heading_err - np.arctan2(p.K_e * sample.signed_lateral_error, abs(v) + p.v_eps),
+            p.delta_min, p.delta_max,
+        ))
+        omega = float(np.clip(p.K_p * (delta_des - delta), p.omega_min, p.omega_max))
+        return np.array([p.a_min, omega])
 
     def _maybe_rebuild_lane(self, state: np.ndarray):
         p = state[:2]
