@@ -39,7 +39,7 @@ class CbfParams:
     r_safe_traf: float = 0.06    # buffer for dynamic traffic
 
     # ---- Safety filter thresholds ----
-    throttle_cap_margin: float = 0.05  # cap throttle when h < this but h >= 0
+    throttle_cap_margin: float = 0.10  # cap throttle + blend steering when h < this but h >= 0
 
     # ---- Obstacle memory ----
     obstacle_radius_default: float = 0.06

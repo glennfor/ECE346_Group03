@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """
-safety_filter_qp_node — simple heuristic safety filter.
+safety_filter_qp_node — heuristic safety filter with smooth steering blend.
 
-Uses the safety value h from safety_monitor_node to decide how to
-modify (or pass through) the human joystick command:
+Uses the safety value h from safety_monitor_node:
 
-  h >= throttle_cap_margin  →  passthrough (truck is safe, no intervention)
-  0 <= h < throttle_cap_margin  →  throttle capped to zero; human steers freely
-  h < 0                     →  full backup control (brake + steer to center)
+  h >= throttle_cap_margin  →  passthrough (human controls freely)
+  0 <= h < throttle_cap_margin  →  CAP ZONE
+      - throttle capped to 0 (no forward acceleration)
+      - steering blended: near margin edge → mostly human;
+                          near h=0 → mostly backup
+  h < 0  →  BACKUP (brake + backup steering fully overrides)
 
-No QP, no gradients, no finite differences.
+The steering blend in the cap zone means the filter nudges the truck back
+toward the lane center rather than suddenly locking out the human.
 
 Published topics:
   /control           ServoMsg          — filtered command to truck
@@ -138,11 +141,18 @@ class SafetyFilterNode(Node):
             return u_out, True
 
         if h < p.throttle_cap_margin:
-            # Near boundary: suppress forward acceleration, human steers freely.
-            u_out = u_human.copy()
-            u_out[0] = min(u_out[0], 0.0)
-            override = u_out[0] < u_human[0] - 1e-6
-            return u_out, override
+            # Cap zone: throttle blocked, steering blended toward backup.
+            # alpha=0 at h=0 (full backup steer), alpha=1 at h=margin (full human steer).
+            # This nudges the truck back rather than suddenly locking the human out.
+            alpha = h / p.throttle_cap_margin
+
+            if self.last_backup_u0 is not None:
+                omega_blend = (1.0 - alpha) * float(self.last_backup_u0[1]) + alpha * float(u_human[1])
+            else:
+                omega_blend = float(u_human[1])
+
+            u_out = np.array([min(u_human[0], 0.0), omega_blend])
+            return u_out, True
 
         # Safe: pass through unchanged.
         return u_human.copy(), False

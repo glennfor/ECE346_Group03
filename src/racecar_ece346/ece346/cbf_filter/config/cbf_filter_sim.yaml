@@ -94,8 +94,9 @@ safety_filter_qp_node:
     v_max: 5.0
     dt: 0.05
 
-    # throttle_cap_margin: distance (m) below which forward accel is suppressed.
-    throttle_cap_margin: 0.05
+    # throttle_cap_margin: distance (m) below which steering blend + throttle cap kicks in.
+    # Wider = more warning distance before full backup fires.
+    throttle_cap_margin: 0.10
 
     # enable_qp=false → passthrough (joystick drives directly).
     enable_qp: true
