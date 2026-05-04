@@ -45,10 +45,10 @@ executable — in which case ask first.
 import math
 
 import rclpy
-from rclpy.node import Node
-
 from ackermann_msgs.msg import AckermannDriveStamped
+from ece346.FinalProject.cbf_qp.node import main as cbf_qp_main
 from nav_msgs.msg import Odometry
+from rclpy.node import Node
 from visualization_msgs.msg import MarkerArray
 
 
@@ -183,15 +183,16 @@ class SafetyFilterNode(Node):
 
 
 def main(args=None):
-    rclpy.init(args=args)
-    node = SafetyFilterNode()
-    try:
-        rclpy.spin(node)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        node.destroy_node()
-        rclpy.shutdown()
+    # rclpy.init(args=args)
+    # node = SafetyFilterNode()
+    # try:
+    #     rclpy.spin(node)
+    # except KeyboardInterrupt:
+    #     pass
+    # finally:
+    #     node.destroy_node()
+    #     rclpy.shutdown()
+    cbf_qp_main(args=args)
 
 
 if __name__ == '__main__':
