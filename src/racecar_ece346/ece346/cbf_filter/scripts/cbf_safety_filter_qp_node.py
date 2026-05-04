@@ -144,18 +144,17 @@ class SafetyFilterNode(Node):
             return u_human.copy(), False
 
         if h < 0:
+            # Hard violation: cap forward thrust and take full backup steering.
             a_out = min(u_human[0], 0.0)
             omega_raw = backup_omega
         else:
-            # Blend both throttle and steering proportionally so the truck
-            # cannot accelerate into danger while the filter is active.
-            # Throttle blend prevents accelerating toward a boundary in the
-            # warning band — the good change from the previous session.
+            # Warning band (0 <= h < effective_margin): steer toward backup only.
+            # Throttle is left unchanged — blending toward a_min here causes
+            # active braking in the warning band, which combined with a long
+            # backup-rollout horizon gives a speed-dependent brake that
+            # permanently caps the truck as velocity grows.
+            a_out = float(u_human[0])
             alpha = h / effective_margin
-            a_out = float(np.clip(
-                (1.0 - alpha) * p.a_min + alpha * u_human[0],
-                p.a_min, p.a_max,
-            ))
             omega_raw = (1.0 - alpha) * backup_omega + alpha * float(u_human[1])
 
         tau = p.steer_blend_lpf_tau_s
