@@ -12,7 +12,7 @@ Y   ?= 0.3
 YAW ?= 0.0
 
 .DEFAULT_GOAL := help
-.PHONY: help build rebuild sim sim-off reset value debug binding override on off
+.PHONY: help build rebuild sim sim-off reset value debug binding override backup filtered on off
 
 help:
 	@echo ""
@@ -24,10 +24,12 @@ help:
 	@echo "  make reset                   reset car to default (2.0, 0.3, yaw=0)"
 	@echo "  make reset X=1 Y=0.5 YAW=0  reset car to custom position"
 	@echo ""
-	@echo "  make value    echo /safety/value"
+	@echo "  make value    echo /safety/value  (h: positive=safe, negative=backup active)"
 	@echo "  make debug    echo /safety/debug_margins  [lane, obs, traf, lookahead]"
 	@echo "  make binding  echo /safety/binding_constraint"
 	@echo "  make override echo /safety/override"
+	@echo "  make backup   echo /safety/backup_u0  [a, omega] from backup planner"
+	@echo "  make filtered echo /safety/u_filtered  [a, omega] actually sent to truck"
 	@echo ""
 	@echo "  make on   enable CBF intervention at runtime"
 	@echo "  make off  disable CBF at runtime (passthrough)"
@@ -64,6 +66,12 @@ binding:
 
 override:
 	ros2 topic echo /safety/override
+
+backup:
+	ros2 topic echo /safety/backup_u0
+
+filtered:
+	ros2 topic echo /safety/u_filtered
 
 on:
 	ros2 param set /safety_filter_qp_node enable_qp true

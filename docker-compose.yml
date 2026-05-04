@@ -33,6 +33,8 @@ services:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       # Mount the src directory into the workspace
       - ./src:/ros2_ws/src:rw
+      # Makefile for convenience targets (make sim, make reset, etc.)
+      - ./Makefile:/ros2_ws/Makefile:ro
       # CycloneDDS setup script
       - ./setup_cyclone.sh:/ros2_ws/setup_cyclone.sh:ro
       # Persist colcon build artifacts between runs
