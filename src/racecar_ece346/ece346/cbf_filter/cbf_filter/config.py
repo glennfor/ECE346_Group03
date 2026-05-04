@@ -44,7 +44,8 @@ class CbfParams:
     # throttle_cap_margin is the minimum geometric margin; the filter also computes
     # a speed-dependent stopping distance and uses whichever is larger.
     throttle_cap_margin: float = 0.12
-    steer_blend_lpf_tau_s: float = 0.10  # EMA on blended ω during intervention (0 = off)
+    steer_blend_lpf_tau_s: float = 0.25  # EMA on blended ω during intervention (0 = off)
+    max_delta_rate_rad_s: float = 2.0    # hard cap on steering angle rate during intervention
 
     # ---- Lane graph / route stability ----
     lane_allow_lane_change: bool = True  # False can yield empty routes; True matches original map API

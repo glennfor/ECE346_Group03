@@ -54,6 +54,7 @@ class SafetyFilterNode(Node):
         self.last_safety_time: float = None
         self.last_backup_u0: np.ndarray = None
         self._omega_blend_prev = 0.0
+        self._prev_commanded_delta: float = 0.0
 
         self._setup_io()
         self.timer = self.create_timer(1.0 / self.params.control_rate_hz, self._step)
@@ -95,6 +96,9 @@ class SafetyFilterNode(Node):
         now = self.get_clock().now().nanoseconds * 1e-9
         state = self.last_state.copy()
         p = self.params
+        # Seed the rate-limiter from the actual current delta on first tick.
+        if self._prev_commanded_delta == 0.0 and abs(state[4]) > 1e-4:
+            self._prev_commanded_delta = float(state[4])
 
         odom_stale = self.last_odom_time is None or now - self.last_odom_time > p.stale_timeout_s
         human_stale = self.last_human_time is None or now - self.last_human_time > p.stale_timeout_s
@@ -166,6 +170,18 @@ class SafetyFilterNode(Node):
 
     def _publish(self, u: np.ndarray, state: np.ndarray, override: bool, u_human):
         stamp = self.get_clock().now().to_msg()
+        p = self.params
+        # Hard rate-limit on steering angle to prevent teleportation on mode switch.
+        # Clamp the commanded delta to ±max_delta_rate_rad_s * dt from last cycle.
+        raw_delta = float(np.clip(state[4] + u[1] * p.dt, p.delta_min, p.delta_max))
+        max_step = p.max_delta_rate_rad_s * p.dt
+        limited_delta = float(np.clip(raw_delta,
+                                      self._prev_commanded_delta - max_step,
+                                      self._prev_commanded_delta + max_step))
+        self._prev_commanded_delta = limited_delta
+        u = u.copy()
+        u[1] = (limited_delta - state[4]) / p.dt
+
         msg = control_to_servo_msg(ServoMsg, u, state, self.params, stamp)
         self.delta_estimate = float(msg.steer)
         self.control_pub.publish(msg)
