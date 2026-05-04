@@ -1,0 +1,8 @@
+# Preset static obstacle positions for the simulation (x, y) in map frame.
+# Add/remove/edit freely; each entry spawns one cube marker at startup.
+# Additional obstacles can be placed at runtime by clicking in RViz with
+# the "Publish Point" tool.
+obstacles:
+  - [2.5, 1.0]
+  - [4.0, 2.3]
+  - [1.2, 3.1]

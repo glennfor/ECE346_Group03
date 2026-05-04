@@ -21,11 +21,13 @@ set(MSG_FILES
   "msg/OdometryArray.msg"
   "msg/ServoMsg.msg"
   "msg/SetArray.msg"
+  "msg/AprilTagDetection.msg"
+  "msg/AprilTagDetectionArray.msg"
 )
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   ${MSG_FILES}
-  DEPENDENCIES std_msgs nav_msgs
+  DEPENDENCIES std_msgs nav_msgs geometry_msgs
 )
 
 

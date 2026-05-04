@@ -1,0 +1,70 @@
+###############################################################################
+# Final Project — real truck config
+# Used by final_project_truck_launch.py
+###############################################################################
+
+visualization_node:
+  ros__parameters:
+    odom_topic: /SLAM/Pose
+
+# --- Routing (consumed by 2D Nav Goal in RViz) ---
+# Truck publishes pose on /SLAM/Pose; routing_node defaults to /slam_pose,
+# so without this block the goal click silently produces no path.
+routing_node:
+  ros__parameters:
+    odom_topic: /SLAM/Pose
+    goal_topic: /goal_pose
+    routing_path_topic: /Routing/Path
+    routing_pathL_topic: /Routing/PathL
+    routing_pathR_topic: /Routing/PathR
+    clicked_goal: True
+    goal_with_heading: False
+    lane_change_cost: 1.0
+
+# --- AprilTag-based static obstacle detection ---
+static_obstacle_detection_node:
+  ros__parameters:
+    odom_topic: /SLAM/Pose
+    static_tag_topic: /SLAM/Tag_Detections_Dynamic
+    static_obs_size: 0.2
+    static_obs_topic: /Obstacles/Static
+
+joy_node:
+  ros__parameters:
+    dev: /dev/input/js0
+    deadzone: 0.05
+    autorepeat_rate: 20.0
+    coalesce_interval: 0.01
+
+joy_to_ackermann_node:
+  ros__parameters:
+    joy_topic: /joy
+    teleop_topic: /teleop
+    throttle_axis: 1         # left stick Y (up = forward)
+    steering_axis: 3         # right stick X (left = +steering)
+    throttle_sign: 1.0
+    steering_sign: 1.0
+    max_speed: 0.5            # m/s 
+    max_steering_angle: 0.34  # rad 
+    deadzone: 0.05
+
+# --- Student's safety filter ---
+safety_filter_node:
+  ros__parameters:
+    teleop_topic: /teleop
+    drive_topic: /drive
+    odom_topic: /SLAM/Pose
+    static_obs_topic: /Obstacles/Static
+    routing_path_topic: /Routing/Path
+    publish_rate: 30.0
+    # Three independent cost channels (see simulation yaml for full details)
+    projection_horizon_sec: 2.0
+    projection_dt: 0.2
+    projection_min_speed: 0.5
+    obs_soft_threshold: 5.0
+    obs_hard_threshold: 50.0
+    lane_soft_threshold: 300.0
+    lane_hard_threshold: 1000.0
+    total_soft_threshold: 400.0
+    total_hard_threshold: 2000.0
+    wheelbase: 0.324

@@ -1,0 +1,119 @@
+###############################################################################
+# Final Project — simulation config
+# Used by final_project_simulation_launch.py
+###############################################################################
+
+simulator_node:
+  ros__parameters:
+    control_topic: /control
+    odom_topic: /slam_pose
+    pub_rate: 30
+    init_x: 2.0
+    init_y: 0.5
+    init_yaw: 0.0
+    reset_service: /simulation/reset
+
+traffic_simulation_node:
+  ros__parameters:
+    static_obs_topic: /Obstacles/Static
+    dyn_obs_topic: /Obstacles/Dynamic
+    # FinalProject owns /Obstacles/Static via static_obstacle_publisher_node.
+    "~num_dyn_obs": 0
+    "~num_static_obs": 0
+    "~static_obs_size": 0.2
+
+# --- FinalProject static obstacle source ---
+# Owns /Obstacles/Static. Loads obstacle_yaml at startup and appends RViz
+# "Publish Point" clicks on the fly.
+# Also publishes a translucent ground plane so RViz Publish Point can raycast
+# anywhere on the map (without it, clicks only register where lane geometry
+# is drawn).
+static_obstacle_publisher_node:
+  ros__parameters:
+    static_obs_topic: /Obstacles/Static
+    clicked_point_topic: /clicked_point
+    static_obs_size: 0.2
+    publish_rate: 30.0
+    frame_id: map
+    # Ground plane is published on its own topic so /Obstacles/Static stays
+    # clean for the student's safety filter. RViz needs a MarkerArray display
+    # for this topic for Publish Point to raycast against it.
+    click_target_topic: /fp_click_target
+    ground_plane_enabled: true
+    ground_plane_center_x: 3.0
+    ground_plane_center_y: 3.0
+    ground_plane_size: 30.0
+    # obstacle_yaml is set to the installed static_obstacles.yaml in the launch file
+
+visualization_node:
+  ros__parameters:
+    odom_topic: /slam_pose
+
+joy_node:
+  ros__parameters:
+    dev: /dev/input/js0
+    deadzone: 0.05
+    autorepeat_rate: 20.0
+    coalesce_interval: 0.01
+
+joy_to_ackermann_node:
+  ros__parameters:
+    joy_topic: /joy
+    teleop_topic: /teleop
+    throttle_axis: 1         # left stick Y (up = forward)
+    steering_axis: 3         # right stick X (left = +steering)
+    throttle_sign: 1.0
+    steering_sign: 1.0
+    max_speed: 1.0            # m/s
+    max_steering_angle: 0.34  # rad
+    deadzone: 0.05
+
+# --- Student's safety filter ---
+# Reference implementation evaluates THREE independent ILQR cost channels
+# along the human's 2 s projection:
+#   obs   = obstacle_cost only
+#   lane  = state_cost (path dev + lane boundary + vel + heading + lat-accel)
+#   total = full cost (obs + state + control)
+# Any channel > its hard threshold -> emergency brake
+# Any channel > its soft threshold -> ILQR steer override (human's speed kept)
+# Watch the log line "obs= lane= total=" during normal driving to tune.
+safety_filter_node:
+  ros__parameters:
+    teleop_topic: /teleop
+    drive_topic: /drive
+    odom_topic: /slam_pose
+    static_obs_topic: /Obstacles/Static
+    routing_path_topic: /Routing/Path
+    publish_rate: 30.0
+    projection_horizon_sec: 2.0
+    projection_dt: 0.2
+    # Minimum velocity used for the forward-sim projection. Ensures the
+    # filter can see obstacles ahead even when the user is crawling.
+    # 0.5 m/s × 2 s = 1.0 m look-ahead floor.
+    projection_min_speed: 0.5
+    # Obstacle cost is ExpLinear with obs_a=10, obs_b=10 in task2_ilqr.yaml.
+    # Rough trigger-distance table (for 1 obstacle, 20-step trajectory):
+    #     min clearance 0.3 m  ->  ~10 cost
+    #     min clearance 0.2 m  ->  ~25 cost
+    #     min clearance 0.1 m  ->  ~74 cost
+    #     touching            ->  ~200 cost
+    #     0.1 m inside        ->  ~400 cost
+    # 25 / 100 brakes late enough to avoid being twitchy but early enough
+    # that a_max=5 m/s^2 can stop the car in the remaining ~0.2 m.
+    obs_soft_threshold: 5.0
+    obs_hard_threshold: 50.0
+    lane_soft_threshold: 300.0
+    lane_hard_threshold: 1000.0
+    total_soft_threshold: 400.0
+    total_hard_threshold: 2000.0
+    wheelbase: 0.324
+
+# --- Sim-only bridge: /drive (Ackermann) -> /control (ServoMsg) ---
+drive_to_servo_node:
+  ros__parameters:
+    drive_topic: /drive
+    control_topic: /control
+    odom_topic: /slam_pose
+    v_max: 1.0          # m/s
+    # a_max and speed_kp use the node's built-in sim defaults (5.0 / 5.0).
+    # The truck yaml overrides these to the physical truck limits.

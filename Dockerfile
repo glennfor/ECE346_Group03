@@ -45,6 +45,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-foxy-ackermann-msgs \
     ros-foxy-joy \
     ros-foxy-rmw-cyclonedds-cpp \
+    # Joystick / PS4 controller support
+    joystick \
+    jstest-gtk \
+    bluez \
+    bluez-tools \
     # Lanelet2
     ros-foxy-lanelet2 \
     # X11 / GUI support
