@@ -19,6 +19,8 @@
 
   <exec_depend>ament_index_python</exec_depend>
 
+  <exec_depend>racecar_routing</exec_depend>
+
   <exec_depend>python3</exec_depend>
 
   <depend>rclpp</depend>

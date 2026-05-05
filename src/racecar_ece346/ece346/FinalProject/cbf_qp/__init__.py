@@ -1,2 +1,1 @@
-"""CBF-QP safety filter package for the ECE346 FinalProject."""
-
+"""Implicit Backup-CBF with box QP for the FinalProject Ackermann stack."""

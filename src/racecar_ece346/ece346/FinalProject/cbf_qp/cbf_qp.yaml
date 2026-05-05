@@ -1,3 +1,7 @@
+# Heuristic grid-search ``CbfQpFilter`` defaults (topics / qp / robustness grouped).
+# ``load_config`` flattens the top-level section keys into ``CbfQpConfig``.
+# Implicit Backup-CBF parameters instead live under FinalProject/config/final_project_*.yaml.
+
 topics:
   teleop_topic: /teleop
   drive_topic: /drive
@@ -53,4 +57,3 @@ failsafe:
 
 diagnostics:
   log_period_sec: 0.5
-
