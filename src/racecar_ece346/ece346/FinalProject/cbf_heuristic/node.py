@@ -63,6 +63,7 @@ class CbfHeuristicSafetyFilterNode(Node):
             )
 
         self.delta_estimate = 0.0
+        self.speed_command_estimate = 0.0
         self.last_state = None
         self.last_odom_time = None
         self.last_human_msg = None
@@ -154,7 +155,21 @@ class CbfHeuristicSafetyFilterNode(Node):
 
     def _publish_command(self, u: np.ndarray, state: np.ndarray):
         stamp = self.get_clock().now().to_msg()
-        msg = control_to_ackermann_msg(AckermannDriveStamped, u, state, self.params, stamp)
+        self.speed_command_estimate = float(
+            np.clip(
+                self.speed_command_estimate + u[0] * self.params.dt,
+                self.params.v_min,
+                self.params.v_max,
+            )
+        )
+        msg = control_to_ackermann_msg(
+            AckermannDriveStamped,
+            u,
+            state,
+            self.params,
+            stamp,
+            self.speed_command_estimate,
+        )
         self.delta_estimate = msg.drive.steering_angle
         self.command_pub.publish(msg)
 

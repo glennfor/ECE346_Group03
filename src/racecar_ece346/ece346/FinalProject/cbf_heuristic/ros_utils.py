@@ -31,10 +31,18 @@ def ackermann_msg_to_control(msg, state: np.ndarray, params: SafetyFilterParams)
     return np.array([accel, omega], dtype=float)
 
 
-def control_to_ackermann_msg(msg_type, u: np.ndarray, state: np.ndarray, params: SafetyFilterParams, stamp):
+def control_to_ackermann_msg(
+    msg_type,
+    u: np.ndarray,
+    state: np.ndarray,
+    params: SafetyFilterParams,
+    stamp,
+    speed_command: float = None,
+):
     msg = msg_type()
     msg.header.stamp = stamp
-    msg.drive.speed = float(np.clip(state[2] + u[0] * params.dt, params.v_min, params.v_max))
+    speed = state[2] + u[0] * params.dt if speed_command is None else speed_command
+    msg.drive.speed = float(np.clip(speed, params.v_min, params.v_max))
     msg.drive.steering_angle = float(np.clip(state[4] + u[1] * params.dt, params.delta_min, params.delta_max))
     return msg
 
