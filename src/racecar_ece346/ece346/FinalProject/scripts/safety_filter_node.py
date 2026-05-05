@@ -113,10 +113,10 @@ class SafetyFilterNode(Node):
 
         # ---- TODO(Task 1.5): create a timer at publish_rate Hz ----
 
-        self.get_logger().info(
-            f"safety_filter_node ready: {teleop_topic} + {odom_topic} "
-            f"+ {obs_topic} -> {drive_topic}"
-        )
+        # self.get_logger().info(
+        #     f"safety_filter_node ready: {teleop_topic} + {odom_topic} "
+        #     f"+ {obs_topic} -> {drive_topic}"
+        # )
 
     # ---- TODO(Task 1.6): implement callbacks ----
 

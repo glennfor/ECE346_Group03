@@ -205,6 +205,8 @@ class CbfQpSafetyFilterNode(Node):
         now = self.get_clock().now().nanoseconds * 1e-9
         if self.last_state is None:
             return
+        
+        
 
         state = self.last_state.copy()
         obstacles = self.static_memory.get(now)
@@ -212,7 +214,6 @@ class CbfQpSafetyFilterNode(Node):
 
         odom_stale = self.last_odom_time is None or now - self.last_odom_time > self.params.stale_timeout_s
         human_stale = self.last_human_time is None or now - self.last_human_time > self.params.stale_timeout_s
-
         try:
             result = evaluate_barrier(state, ctx)
             component_margins = margin_components(state, ctx)
@@ -279,7 +280,6 @@ class CbfQpSafetyFilterNode(Node):
             elif self.override_hold > 0:
                 self.override_hold -= 1
                 status = "hysteresis"
-
             override = deviates or self.override_hold > 0 or status.startswith("fallback")
             self._publish_command(u_filtered, state)
             self._publish_debug(result, component_margins, u_human, u_filtered, override, status)
