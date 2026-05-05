@@ -52,18 +52,15 @@ from ackermann_msgs.msg import AckermannDriveStamped
 # from ece346.FinalProject.cbf_heuristic.node import main as cbf_heuristic_main
 # from ece346.FinalProject.cbf_qp.node import main as cbf_qp_main
 # from ece346.FinalProject.ilqr.node import main as ilqr_main
-from ece346.FinalProject.ilqr.config import DEFAULT_CONFIG_PATH, IlqrQpConfig, load_config
-from ece346.FinalProject.ilqr.geometry import (
-    fallback_path_ahead,
-    forward_obstacle_margin,
-    obstacles_from_msg,
-    obstacle_time_to_collision,
-    path_from_msg,
-    state_from_odom,
-)
+from ece346.FinalProject.ilqr.config import (DEFAULT_CONFIG_PATH, IlqrQpConfig,
+                                             load_config)
+from ece346.FinalProject.ilqr.geometry import (fallback_path_ahead,
+                                               forward_obstacle_margin,
+                                               obstacle_time_to_collision,
+                                               obstacles_from_msg,
+                                               path_from_msg, state_from_odom)
 from ece346.FinalProject.ilqr.solver import CandidatePlan, IlqrLocalPlanner
-from nav_msgs.msg import Odometry
-from nav_msgs.msg import Path
+from nav_msgs.msg import Odometry, Path
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from visualization_msgs.msg import MarkerArray
@@ -350,9 +347,6 @@ class SafetyFilterNode(Node):
         hard_forward_stop = self._has_hard_forward_stop(human_speed, state, obstacle_list)
         soft_forward_stop = self._has_soft_forward_stop(human_speed, state, obstacle_list)
 
-        if safety_plan.margins.is_safe(self.config.soft_margin) and not soft_forward_stop:
-            return self._make_command(teleop, human_speed, human_steering)
-
         optimal_plan = self.optimal_planner.plan(
             human_speed=human_speed,
             human_steering=human_steering,
@@ -378,6 +372,22 @@ class SafetyFilterNode(Node):
             f"cost={optimal_plan.cost:.2f}",
         )
         return self._make_command(teleop, speed, steering)
+
+    def _should_prefer_optimal_plan(
+        self,
+        safety_plan: CandidatePlan,
+        optimal_plan: CandidatePlan,
+    ) -> bool:
+        safety_lane = safety_plan.margins.lane
+        optimal_lane = optimal_plan.margins.lane
+        if safety_lane is None or optimal_lane is None:
+            return False
+
+        lane_guard_margin = self.config.soft_margin + 0.12
+        if safety_lane < lane_guard_margin and optimal_lane > safety_lane:
+            return True
+
+        return optimal_lane - safety_lane > 0.08 and optimal_plan.cost < safety_plan.cost
 
     def _check_current_control(
         self,
