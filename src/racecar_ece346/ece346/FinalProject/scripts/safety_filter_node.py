@@ -291,7 +291,7 @@ class SafetyFilterNode(Node):
             return self._make_command(
                 teleop,
                 self.config.stale_odom_speed,
-                self.config.stale_odom_steering,
+                human_steering,
             )
 
         obstacle_msg = (
@@ -310,10 +310,30 @@ class SafetyFilterNode(Node):
             obstacle_msg,
             self.config.obstacle_radius_buffer,
         )
-        path = self._effective_path(state, human_speed, path_from_msg(path_msg))
+        raw_path = path_from_msg(path_msg)
+
+        if len(raw_path) < 2:
+            if self._has_hard_forward_stop(human_speed, state, obstacle_list):
+                self._log_periodic(now, "missing path with obstacle ahead; braking")
+                return self._make_command(
+                    teleop,
+                    self.config.no_solution_speed,
+                    human_steering,
+                )
+            if self.config.require_path_for_lane_filter:
+                self._log_periodic(now, "missing path; no ilqr solution; stopping")
+                return self._make_command(
+                    teleop,
+                    self.config.no_solution_speed,
+                    human_steering if self.config.no_solution_keep_steering else 0.0,
+                )
+            self._log_periodic(now, "missing path; passing through teleop steering")
+            return self._make_command(teleop, human_speed, human_steering)
+
+        path = self._effective_path(state, human_speed, raw_path)
 
         if self.config.require_path_for_lane_filter and len(path) < 2:
-            self._log_periodic(now, "missing path; publishing failsafe")
+            self._log_periodic(now, "missing path; no ilqr solution; stopping")
             return self._make_command(
                 teleop,
                 self.config.no_solution_speed,
