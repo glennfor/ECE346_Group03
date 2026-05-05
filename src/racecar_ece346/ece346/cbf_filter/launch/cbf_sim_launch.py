@@ -53,6 +53,15 @@ def generate_launch_description():
             launch_arguments={"param_file": param_file}.items(),
         ),
 
+        # Raw joystick driver
+        Node(
+            package="joy",
+            executable="joy_node",
+            name="joy_node",
+            output="screen",
+            parameters=[param_file],
+        ),
+
         # Joystick → /human_control
         Node(
             package="racecar_ece346",
@@ -87,5 +96,14 @@ def generate_launch_description():
             name="safety_filter_qp_node",
             output="screen",
             parameters=[param_file, {"enable_qp": ParameterValue(enable_qp, value_type=bool)}],
+        ),
+
+        # Safety visualization (RViz markers)
+        Node(
+            package="racecar_ece346",
+            executable="safety_viz_node.py",
+            name="safety_viz_node",
+            output="screen",
+            parameters=[param_file],
         ),
     ])
