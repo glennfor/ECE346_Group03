@@ -315,7 +315,8 @@ class CbfHeuristicSafetyFilterNode(Node):
                 "lane_boundary_recenter",
             )
 
-        candidates = [(u_human, "human_passthrough")]
+        # Check if any safety heuristic would have intervened
+        any_unsafe = False
         for control, label in (
             self._predicted_lane_departure_control(state, ctx, u_human),
             self._corner_pre_turn_control(state, ctx, u_human),
@@ -324,13 +325,15 @@ class CbfHeuristicSafetyFilterNode(Node):
             self._kinematic_limit_recovery_control(state, margins, u_human),
         ):
             if control is not None:
-                candidates.append((control, label))
+                any_unsafe = True
+                break
 
-        chosen_control, chosen_label = candidates[-1]
-        if margins["obstacle"] < self.params.obstacle_guard_margin_m:
-            candidates.append((brake_and_recenter(state, ctx.lane, self.params), "candidate_brake_recenter"))
-            candidates.append((emergency_brake(state, self.params), "candidate_emergency_brake"))
-            chosen_control, chosen_label = self._best_candidate_by_margin(state, ctx, candidates)
+        if any_unsafe or margins["obstacle"] < self.params.obstacle_guard_margin_m:
+            chosen_control = emergency_brake(state, self.params)
+            chosen_label = "unsafe_brake"
+        else:
+            chosen_control = u_human
+            chosen_label = "human_passthrough"
 
         return HeuristicDecision(clip_control(chosen_control, self.params), chosen_label)
 
