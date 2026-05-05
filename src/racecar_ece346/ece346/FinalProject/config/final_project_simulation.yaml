@@ -68,106 +68,45 @@ joy_to_ackermann_node:
     max_steering_angle: 0.34  # rad
     deadzone: 0.05
 
-# --- Student's safety filter (implicit Backup-CBF + box QP, FinalProject/cbf_qp) ---
-# Lane geometry comes from Lanelet2 (racecar_routing/maps/track.osm), not Routing/Path.
+# --- Student's safety filter ---
+# Reference implementation evaluates THREE independent ILQR cost channels
+# along the human's 2 s projection:
+#   obs   = obstacle_cost only
+#   lane  = state_cost (path dev + lane boundary + vel + heading + lat-accel)
+#   total = full cost (obs + state + control)
+# Any channel > its hard threshold -> emergency brake
+# Any channel > its soft threshold -> ILQR steer override (human's speed kept)
+# Watch the log line "obs= lane= total=" during normal driving to tune.
 safety_filter_node:
   ros__parameters:
     teleop_topic: /teleop
     drive_topic: /drive
     odom_topic: /slam_pose
     static_obs_topic: /Obstacles/Static
-    dynamic_obstacles_topic: /Obstacles/Dynamic
     routing_path_topic: /Routing/Path
     publish_rate: 30.0
-    publish_debug: true
-    map_file: ''
-
-    wheelbase_m: 0.324
-    truck_radius_m: 0.14
-    truck_length_m: 0.38
-    a_min: -5.0
-    a_max: 5.0
-    omega_min: -6.0
-    omega_max: 6.0
-    delta_min: -0.34
-    delta_max: 0.34
-    v_min: 0.0
-    v_max: 1.0
-    dt: 0.0333333333
-    horizon_H: 30
-
-    r_safe_lane: 0.02
-    r_safe_obs: 0.12
-    r_safe_traf: 0.18
-    r_safe_kin: 0.0
-    lane_guard_margin_m: 0.08
-    obstacle_guard_margin_m: 0.35
-    traffic_guard_margin_m: 0.45
-    lane_recovery_speed_mps: 0.25
-    lane_recovery_accel_gain: 4.0
-    obstacle_radius_default: 0.14
-    obstacle_memory_ttl_s: 1.0
-    obstacle_memory_growth: 0.5
-
-    K_e: 1.0
-    K_p: 5.0
-    v_eps: 0.3
-    lambda_cbf: 0.4
-    qp_R_accel: 1.0
-    qp_R_omega: 1.0
-    grad_eps: 0.001
-    exact_safety_check: true
-    hysteresis_cycles: 15
-    passthrough_tolerance: 0.05
-    stale_timeout_s: 0.5
-    recovery_h_improvement: 0.001
-    lane_change_cost: 1.0
-    lane_context_rebuild_distance_m: 0.5
-    lane_context_rebuild_yaw_rad: 0.35
-
-# -----------------------------------------------------------------------------
-# ARCHIVED ILQR safety_filter_node block (HEAD reference). Not parsed by ROS.
-# -----------------------------------------------------------------------------
-# # --- Student's safety filter ---
-# # Reference implementation evaluates THREE independent ILQR cost channels
-# # along the human's 2 s projection:
-# #   obs   = obstacle_cost only
-# #   lane  = state_cost (path dev + lane boundary + vel + heading + lat-accel)
-# #   total = full cost (obs + state + control)
-# # Any channel > its hard threshold -> emergency brake
-# # Any channel > its soft threshold -> ILQR steer override (human's speed kept)
-# # Watch the log line "obs= lane= total=" during normal driving to tune.
-# safety_filter_node:
-#   ros__parameters:
-#     teleop_topic: /teleop
-#     drive_topic: /drive
-#     odom_topic: /slam_pose
-#     static_obs_topic: /Obstacles/Static
-#     routing_path_topic: /Routing/Path
-#     publish_rate: 30.0
-#     projection_horizon_sec: 2.0
-#     projection_dt: 0.2
-#     # Minimum velocity used for the forward-sim projection. Ensures the
-#     # filter can see obstacles ahead even when the user is crawling.
-#     # 0.5 m/s × 2 s = 1.0 m look-ahead floor.
-#     projection_min_speed: 0.5
-#     # Obstacle cost is ExpLinear with obs_a=10, obs_b=10 in task2_ilqr.yaml.
-#     # Rough trigger-distance table (for 1 obstacle, 20-step trajectory):
-#     #     min clearance 0.3 m  ->  ~10 cost
-#     #     min clearance 0.2 m  ->  ~25 cost
-#     #     min clearance 0.1 m  ->  ~74 cost
-#     #     touching            ->  ~200 cost
-#     #     0.1 m inside        ->  ~400 cost
-#     # 25 / 100 brakes late enough to avoid being twitchy but early enough
-#     # that a_max=5 m/s^2 can stop the car in the remaining ~0.2 m.
-#     obs_soft_threshold: 5.0
-#     obs_hard_threshold: 50.0
-#     lane_soft_threshold: 300.0
-#     lane_hard_threshold: 1000.0
-#     total_soft_threshold: 400.0
-#     total_hard_threshold: 2000.0
-#     wheelbase: 0.324
-# 
+    projection_horizon_sec: 2.0
+    projection_dt: 0.2
+    # Minimum velocity used for the forward-sim projection. Ensures the
+    # filter can see obstacles ahead even when the user is crawling.
+    # 0.5 m/s × 2 s = 1.0 m look-ahead floor.
+    projection_min_speed: 0.5
+    # Obstacle cost is ExpLinear with obs_a=10, obs_b=10 in task2_ilqr.yaml.
+    # Rough trigger-distance table (for 1 obstacle, 20-step trajectory):
+    #     min clearance 0.3 m  ->  ~10 cost
+    #     min clearance 0.2 m  ->  ~25 cost
+    #     min clearance 0.1 m  ->  ~74 cost
+    #     touching            ->  ~200 cost
+    #     0.1 m inside        ->  ~400 cost
+    # 25 / 100 brakes late enough to avoid being twitchy but early enough
+    # that a_max=5 m/s^2 can stop the car in the remaining ~0.2 m.
+    obs_soft_threshold: 5.0
+    obs_hard_threshold: 50.0
+    lane_soft_threshold: 300.0
+    lane_hard_threshold: 1000.0
+    total_soft_threshold: 400.0
+    total_hard_threshold: 2000.0
+    wheelbase: 0.324
 
 # --- Sim-only bridge: /drive (Ackermann) -> /control (ServoMsg) ---
 drive_to_servo_node:
