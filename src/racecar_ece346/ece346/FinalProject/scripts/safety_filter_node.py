@@ -46,6 +46,7 @@ import math
 
 import rclpy
 from ackermann_msgs.msg import AckermannDriveStamped
+from ece346.FinalProject.cbf_heuristic.node import main as cbf_heuristic_main
 from ece346.FinalProject.cbf_qp.node import main as cbf_qp_main
 from ece346.FinalProject.ilqr.node import main as ilqr_main
 from nav_msgs.msg import Odometry
@@ -199,11 +200,14 @@ def main(args=None):
     # Test any other safety filter here
     # ===========================
 
-    # ILQR-QP Safety Filter
+    # ILQR Safety Filter
     # ilqr_main(args=args)
 
-    # CBF-QP Safety Filter
-    cbf_qp_main(args=args)
+    # # CBF-QP Safety Filter
+    # cbf_qp_main(args=args)
+
+    # CBF-Heuristic Safety Filter
+    cbf_heuristic_main(args=args)
 
 
 if __name__ == '__main__':
