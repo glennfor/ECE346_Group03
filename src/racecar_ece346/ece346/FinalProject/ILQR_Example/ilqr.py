@@ -248,7 +248,10 @@ class ILQR():
 		# We first check if the planner is ready
 		if self.ref_path is None:
 			if not self.warned_no_path:
-				self.logger.info('No reference path is provided.')
+				if hasattr(self, 'logger'):
+					self.logger.info('No reference path is provided.')
+				else:
+					print('No reference path is provided.')
 				self.warned_no_path = True
 			return dict(status=-1)
 
@@ -271,6 +274,7 @@ class ILQR():
 		# Get the initial cost of the trajectory.
 		J = self.cost.get_traj_cost(trajectory, controls, path_refs, obs_refs)
   
+		status = -1
 		converged = False
 		for i in range(self.max_iter):
 			K_closed_loop, k_open_loop, last_reg= self.backward_pass(trajectory, controls, path_refs, obs_refs)
@@ -278,7 +282,7 @@ class ILQR():
 			for alpha in self.alphas:
 				trajectory_new, controls_new = self.forward_pass(trajectory, controls, K_closed_loop, k_open_loop, alpha)
 				path_refs_new, obs_refs_new = self.get_references(trajectory_new)
-				J_new = self.cost.get_traj_cost(trajectory_new, controls_new, path_refs, obs_refs)
+				J_new = self.cost.get_traj_cost(trajectory_new, controls_new, path_refs_new, obs_refs_new)
 				if J_new<=J:
 					if np.abs(J - J_new) < self.tol:
 						converged = True   
