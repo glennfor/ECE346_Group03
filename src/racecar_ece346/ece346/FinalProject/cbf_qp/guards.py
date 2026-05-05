@@ -21,8 +21,8 @@ def select_hard_guard_control(
     params: SafetyFilterParams,
     u_human: np.ndarray,
 ) -> GuardResult:
-    if margins["obstacle"] < params.obstacle_guard_margin_m:
-        return GuardResult(emergency_brake(state, params), "obstacle_guard_brake")
+    if margins["forward_obstacle"] < params.forward_obstacle_brake_margin_m:
+        return GuardResult(emergency_brake(state, params), "forward_obstacle_guard_brake")
     if margins["traffic"] < params.traffic_guard_margin_m:
         return GuardResult(emergency_brake(state, params), "traffic_guard_brake")
     if margins["lane"] < params.lane_guard_margin_m:

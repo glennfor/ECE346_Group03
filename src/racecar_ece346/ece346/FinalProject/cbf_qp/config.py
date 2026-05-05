@@ -14,12 +14,12 @@ class SafetyFilterParams:
     truck_radius_m: float = 0.274
     truck_length_m: float = 0.46
 
-    a_min: float = -1.0
-    a_max: float = 1.0
-    omega_min: float = -3.0
-    omega_max: float = 3.0
-    delta_min: float = -0.26
-    delta_max: float = 0.31
+    a_min: float = -4.0
+    a_max: float = 3.0
+    omega_min: float = -6.0
+    omega_max: float = 6.0
+    delta_min: float = -0.34
+    delta_max: float = 0.34
     v_min: float = 0.0
     v_max: float = 1.0
 
@@ -34,14 +34,17 @@ class SafetyFilterParams:
     lane_guard_margin_m: float = 0.05
     obstacle_guard_margin_m: float = 0.35
     traffic_guard_margin_m: float = 0.45
-    lane_recovery_speed_mps: float = 0.2
-    lane_recovery_accel_gain: float = 4.0
+    forward_obstacle_width_m: float = 0.45
+    forward_obstacle_distance_m: float = 1.4
+    forward_obstacle_brake_margin_m: float = 0.25
+    lane_recovery_speed_mps: float = 0.65
+    lane_recovery_accel_gain: float = 5.0
     obstacle_radius_default: float = 0.12
     obstacle_memory_ttl_s: float = 1.0
     obstacle_memory_growth: float = 0.5
 
-    K_e: float = 1.0
-    K_p: float = 5.0
+    K_e: float = 2.2
+    K_p: float = 7.0
     v_eps: float = 0.3
 
     lambda_cbf: float = 0.4

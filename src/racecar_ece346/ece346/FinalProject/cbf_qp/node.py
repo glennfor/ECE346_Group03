@@ -177,6 +177,7 @@ class CbfQpSafetyFilterNode(Node):
         margins_msg.data = [
             float(component_margins["lane"]),
             float(component_margins["obstacle"]),
+            float(component_margins["forward_obstacle"]),
             float(component_margins["traffic"]),
             float(component_margins["kinematic"]),
         ]
