@@ -51,6 +51,7 @@ class SafetyFilterNode(Node):
         self.last_human_msg = None
         self.last_human_time: float = None
         self.last_h: float = None
+        self.last_h_human: float = None
         self.last_safety_time: float = None
         self.last_backup_u0: np.ndarray = None
         self._omega_blend_prev = 0.0
@@ -66,6 +67,7 @@ class SafetyFilterNode(Node):
         self.create_subscription(Odometry, self.params.odom_topic, self._odom_cb, 10)
         self.create_subscription(ServoMsg, self.params.human_control_topic, self._human_cb, 10)
         self.create_subscription(Float32, "/safety/value", self._value_cb, 1)
+        self.create_subscription(Float32, "/safety/h_human", self._h_human_cb, 1)
         self.create_subscription(Float64MultiArray, "/safety/backup_u0", self._u0_cb, 1)
 
         self.control_pub = self.create_publisher(ServoMsg, self.params.filtered_control_topic, 1)
@@ -84,6 +86,9 @@ class SafetyFilterNode(Node):
     def _value_cb(self, msg: Float32):
         self.last_h = float(msg.data)
         self.last_safety_time = self.get_clock().now().nanoseconds * 1e-9
+
+    def _h_human_cb(self, msg: Float32):
+        self.last_h_human = float(msg.data)
 
     def _u0_cb(self, msg: Float64MultiArray):
         if len(msg.data) == 2:
@@ -132,33 +137,31 @@ class SafetyFilterNode(Node):
         self._publish(u_out, state, override, u_human)
 
     def _filter(self, u_human: np.ndarray):
-        h = self.last_h
+        h = self.last_h          # composite: min(h_backup, h_human) — emergency certificate
         p = self.params
-
-        # Fixed warning-band threshold. The dual rollout in the monitor already
-        # captures whether the backup policy can stop safely — effective_margin
-        # must NOT scale with speed here because stopping_dist can exceed the
-        # lane's max possible margin, making the filter permanently active.
         effective_margin = p.throttle_cap_margin
-
         backup_omega = float(self.last_backup_u0[1]) if self.last_backup_u0 is not None else 0.0
 
-        if h >= effective_margin:
+        # Primary gate: is the human's own predicted path safe?
+        # Fall back to composite h if h_human hasn't arrived yet.
+        h_human = self.last_h_human if self.last_h_human is not None else h
+
+        if h_human >= effective_margin:
+            # Human path is safely clear — pass through entirely, no override.
             self._omega_blend_prev = float(u_human[1])
             return u_human.copy(), False
 
         if h < 0:
-            # Hard violation: cap forward thrust and take full backup steering.
+            # Emergency: even the backup policy can't certify safety from here.
+            # Cap forward thrust and take full backup steering.
             a_out = min(u_human[0], 0.0)
             omega_raw = backup_omega
         else:
-            # Warning band (0 <= h < effective_margin): steer toward backup only.
-            # Throttle is left unchanged — blending toward a_min here causes
-            # active braking in the warning band, which combined with a long
-            # backup-rollout horizon gives a speed-dependent brake that
-            # permanently caps the truck as velocity grows.
+            # Human path is approaching unsafe (0 <= h_human < margin)
+            # but backup can still recover. Blend steering toward backup,
+            # leave throttle to the human.
             a_out = float(u_human[0])
-            alpha = h / effective_margin
+            alpha = max(0.0, h_human) / effective_margin
             omega_raw = (1.0 - alpha) * backup_omega + alpha * float(u_human[1])
 
         tau = p.steer_blend_lpf_tau_s

@@ -99,6 +99,7 @@ class SafetyMonitorNode(Node):
         )
 
         self.value_pub = self.create_publisher(Float32, "/safety/value", 1)
+        self.h_human_pub = self.create_publisher(Float32, "/safety/h_human", 1)
         self.debug_pub = self.create_publisher(Float64MultiArray, "/safety/debug_margins", 1)
         self.binding_pub = self.create_publisher(String, "/safety/binding_constraint", 1)
 
@@ -147,8 +148,11 @@ class SafetyMonitorNode(Node):
                 v_msg = Float32()
                 v_msg.data = h
                 self.value_pub.publish(v_msg)
+                hh_msg = Float32()
+                hh_msg.data = h
+                self.h_human_pub.publish(hh_msg)
                 d_msg = Float64MultiArray()
-                d_msg.data = [h, 100.0, 100.0, h]
+                d_msg.data = [h, 100.0, 100.0, h, h]
                 self.debug_pub.publish(d_msg)
                 b_msg = String()
                 b_msg.data = binding
@@ -203,15 +207,17 @@ class SafetyMonitorNode(Node):
                 )
                 lookahead_human = min(lookahead_human, lk)
 
-            # Both conditions must hold: backup feasibility AND human-path safety.
-            lookahead_min = min(lookahead_backup, lookahead_human)
-            h = min(current_min, lookahead_min)
+            # h_human: is the human's current path safe?
+            # h (composite): can the backup policy still certify safety from here?
+            h_human = min(current_min, lookahead_human)
+            h = min(current_min, lookahead_backup, lookahead_human)
 
             components = {
                 "lane": m_lane,
                 "obstacle": m_obs,
                 "traffic": m_traf,
-                "lookahead": lookahead_min,
+                "lookahead_backup": lookahead_backup,
+                "lookahead_human": lookahead_human,
             }
             binding = min(components, key=components.get)
 
@@ -220,8 +226,13 @@ class SafetyMonitorNode(Node):
             v_msg.data = float(h)
             self.value_pub.publish(v_msg)
 
+            hh_msg = Float32()
+            hh_msg.data = float(h_human)
+            self.h_human_pub.publish(hh_msg)
+
             d_msg = Float64MultiArray()
-            d_msg.data = [float(m_lane), float(m_obs), float(m_traf), float(lookahead_min)]
+            d_msg.data = [float(m_lane), float(m_obs), float(m_traf),
+                          float(lookahead_backup), float(lookahead_human)]
             self.debug_pub.publish(d_msg)
 
             b_msg = String()
