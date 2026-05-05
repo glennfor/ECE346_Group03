@@ -5,6 +5,7 @@
 FROM ros:foxy
 
 ENV DEBIAN_FRONTEND=noninteractive
+RUN echo 'Acquire::ForceIPv4 "true";' > /etc/apt/apt.conf.d/99force-ipv4
 
 # ---------- ROS 2 apt dependencies ----------
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -64,9 +65,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # ---------- Newer Mesa drivers for modern GPUs (AMD/Intel) ----------
-RUN add-apt-repository -y ppa:kisak/kisak-mesa && \
-    apt-get update && apt-get upgrade -y && \
-    rm -rf /var/lib/apt/lists/*
+# RUN add-apt-repository -y ppa:kisak/kisak-mesa && \
+#     apt-get update && apt-get upgrade -y && \
+#     rm -rf /var/lib/apt/lists/*
 
 # ---------- Upgrade pip ----------
 # Pin setuptools < 71 to avoid canonicalize_version incompatibility with pyspline
@@ -124,6 +125,7 @@ RUN echo 'export LIBGL_ALWAYS_SOFTWARE=1' >> /root/.bashrc && \
     echo 'export MESA_GL_VERSION_OVERRIDE=3.3' >> /root/.bashrc && \
     echo 'source /opt/ros/foxy/setup.bash' >> /root/.bashrc && \
     echo '[ -f ${ROS_WS}/install/setup.bash ] && source ${ROS_WS}/install/setup.bash' >> /root/.bashrc
+
 
 # ---------- Entrypoint ----------
 COPY docker/entrypoint.sh /entrypoint.sh
