@@ -14,6 +14,13 @@ from ece346.Final_Project.safety_filter.margins import (
 )
 from ece346.Final_Project.safety_filter.obstacle_memory import Obstacle
 from ece346.Final_Project.safety_filter.qp import solve_box_halfspace_qp
+from ece346.FinalProject.ilqr.config import IlqrQpConfig
+from ece346.FinalProject.ilqr.filter import IlqrQpFilter
+from ece346.FinalProject.ilqr.geometry import (
+    Obstacle as IlqrObstacle,
+    PathPoint,
+    VehicleState,
+)
 
 
 def make_params():
@@ -40,6 +47,28 @@ def make_lane():
     centerline = np.column_stack([xs, np.zeros_like(xs)])
     half_width = np.full_like(xs, 0.5)
     return LaneContext.from_centerline(centerline, half_width, half_width)
+
+
+def make_ilqr_filter():
+    return IlqrQpFilter(
+        IlqrQpConfig(
+            horizon_sec=1.5,
+            dt=0.1,
+            max_speed=1.0,
+            require_path_for_lane_filter=True,
+            lane_margin=0.08,
+            vehicle_radius=0.16,
+            localization_buffer=0.04,
+            soft_margin=0.05,
+        )
+    )
+
+
+def make_ilqr_straight_path():
+    return [
+        PathPoint(x=0.0, y=0.0, left_width=0.5, right_width=0.5, speed_limit=1.0),
+        PathPoint(x=3.0, y=0.0, left_width=0.5, right_width=0.5, speed_limit=1.0),
+    ]
 
 
 def test_dynamics_brake_and_wrap():
@@ -189,4 +218,54 @@ def test_qp_passthrough_projection_and_infeasible():
 
     infeasible = solve_box_halfspace_qp(u_human, np.array([1.0, 0.0]), 2.0, params)
     assert infeasible.status == "infeasible"
+
+
+def test_ilqr_uses_fallback_path_without_route():
+    safety_filter = make_ilqr_filter()
+    state = VehicleState(x=0.0, y=0.0, yaw=0.0, speed=0.0)
+
+    command = safety_filter.filter_command(0.6, 0.0, state, [], [])
+
+    assert not command.is_override
+    assert command.reason == "pass"
+    assert command.speed == 0.6
+
+
+def test_ilqr_steers_back_from_lane_departure():
+    safety_filter = make_ilqr_filter()
+    path = make_ilqr_straight_path()
+    state = VehicleState(x=0.0, y=0.42, yaw=0.0, speed=0.4)
+
+    command = safety_filter.filter_command(0.6, 0.0, state, path, [])
+
+    assert command.is_override
+    assert command.steering_angle < 0.0
+
+
+def test_ilqr_brakes_for_head_on_obstacle():
+    safety_filter = make_ilqr_filter()
+    path = make_ilqr_straight_path()
+    state = VehicleState(x=0.0, y=0.0, yaw=0.0, speed=0.6)
+    obstacle = IlqrObstacle(x=0.65, y=0.0, radius=0.12)
+
+    command = safety_filter.filter_command(0.8, 0.0, state, path, [obstacle])
+
+    assert command.is_override
+    assert command.reason == "obstacle_brake"
+    assert command.speed == 0.0
+
+
+def test_ilqr_turns_into_left_corner():
+    safety_filter = make_ilqr_filter()
+    path = [
+        PathPoint(x=0.0, y=0.0, left_width=0.5, right_width=0.5, speed_limit=1.0),
+        PathPoint(x=1.0, y=0.0, left_width=0.5, right_width=0.5, speed_limit=1.0),
+        PathPoint(x=1.0, y=1.5, left_width=0.5, right_width=0.5, speed_limit=1.0),
+    ]
+    state = VehicleState(x=0.75, y=0.0, yaw=0.0, speed=0.4)
+
+    command = safety_filter.filter_command(0.5, 0.0, state, path, [])
+
+    assert command.is_override
+    assert command.steering_angle > 0.0
 

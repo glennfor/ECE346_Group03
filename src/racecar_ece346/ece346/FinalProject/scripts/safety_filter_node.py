@@ -200,10 +200,10 @@ def main(args=None):
     # ===========================
 
     # ILQR-QP Safety Filter
-    ilqr_main(args=args)
+    # ilqr_main(args=args)
 
     # CBF-QP Safety Filter
-    # cbf_qp_main(args=args)
+    cbf_qp_main(args=args)
 
 
 if __name__ == '__main__':
