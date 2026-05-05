@@ -1,9 +1,22 @@
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 import numpy as np
 
 from .dynamics import wrap_angle
+
+
+def _route_fingerprint(route: Any) -> Optional[Tuple]:
+    route_array = np.asarray(route, dtype=float)
+    if route_array.shape[0] < 2:
+        return None
+    return (
+        int(route_array.shape[0]),
+        float(route_array[0, 0]),
+        float(route_array[0, 1]),
+        float(route_array[1, 0]),
+        float(route_array[1, 1]),
+    )
 
 
 @dataclass
@@ -104,11 +117,21 @@ class LaneContext:
 
 
 class LaneletContextBuilder:
-    def __init__(self, map_file: str, node: Optional[object] = None, lane_change_cost: float = 1.0):
+    def __init__(
+        self,
+        map_file: str,
+        node: Optional[object] = None,
+        lane_change_cost: float = 1.0,
+        allow_lane_change: bool = True,
+        route_hysteresis_rad: float = 0.25,
+    ):
         self.map_file = map_file
         self.node = node
         self.lane_change_cost = lane_change_cost
+        self.allow_lane_change = allow_lane_change
+        self.route_hysteresis_rad = route_hysteresis_rad
         self._wrapper = None
+        self._last_route_fingerprint: Optional[Tuple] = None
 
     def _load_wrapper(self):
         if self._wrapper is not None:
@@ -126,7 +149,24 @@ class LaneletContextBuilder:
         lane_pose = self._state_to_lane_pose(state)
         lanelet, arc = wrapper.get_closest_lanelet(lane_pose, check_psi=True)
         start_s = getattr(arc, "length", 0.0) / max(wrapper.get_lanelet_length(lanelet), 1e-6)
-        routes = wrapper.get_reachable_path(lanelet, start_s, distance_m, allow_lane_change=True)
+        allow_lane_change = self.allow_lane_change
+        routes = wrapper.get_reachable_path(
+            lanelet,
+            start_s,
+            distance_m,
+            allow_lane_change=allow_lane_change,
+        )
+        width_allow_lane_change = allow_lane_change
+        if not routes:
+            routes = wrapper.get_reachable_path(
+                lanelet,
+                start_s,
+                distance_m,
+                allow_lane_change=True,
+            )
+            width_allow_lane_change = True
+        if not routes:
+            raise RuntimeError("get_reachable_path returned no routes")
 
         centerline = self._select_route(routes, lane_pose)
         width_left = []
@@ -134,7 +174,11 @@ class LaneletContextBuilder:
         for x, y in centerline:
             nearest_lanelet, _ = wrapper.get_closest_lanelet([x, y], check_psi=False)
             point = type("Point", (), {"x": float(x), "y": float(y)})()
-            left, right = wrapper.get_lane_width(point, nearest_lanelet, allow_lane_change=True)
+            left, right = wrapper.get_lane_width(
+                point,
+                nearest_lanelet,
+                allow_lane_change=width_allow_lane_change,
+            )
             width_left.append(left)
             width_right.append(right)
 
@@ -146,10 +190,9 @@ class LaneletContextBuilder:
             return np.array([state[0], state[1], state[3]], dtype=float)
         return np.asarray(state[:3], dtype=float)
 
-    @staticmethod
-    def _select_route(routes, lane_pose: np.ndarray) -> np.ndarray:
+    def _select_route(self, routes: List, lane_pose: np.ndarray) -> np.ndarray:
         if not routes:
-            return np.array([[lane_pose[0], lane_pose[1]], [lane_pose[0] + 1.0, lane_pose[1]]], dtype=float)
+            raise ValueError("empty routes in _select_route")
 
         heading = float(lane_pose[2]) if len(lane_pose) >= 3 else 0.0
 
@@ -162,7 +205,23 @@ class LaneletContextBuilder:
             start_distance = np.linalg.norm(route[0] - lane_pose[:2])
             return heading_error + 0.1 * start_distance
 
-        return np.asarray(min(routes, key=route_score), dtype=float)
+        scored = [(route_score(route), route) for route in routes if len(route) >= 2]
+        if not scored:
+            raise ValueError("no route with >= 2 centerline points")
+
+        best_score, best_route = min(scored, key=lambda item: item[0])
+        chosen_route = best_route
+        if self._last_route_fingerprint is not None and self.route_hysteresis_rad > 0.0:
+            for score, route in scored:
+                if score > best_score + self.route_hysteresis_rad:
+                    continue
+                if _route_fingerprint(route) == self._last_route_fingerprint:
+                    chosen_route = route
+                    break
+
+        route_array = np.asarray(chosen_route, dtype=float)
+        self._last_route_fingerprint = _route_fingerprint(route_array)
+        return route_array
 
 
 def heading_error_to_lane(x: np.ndarray, lane: LaneContext) -> Tuple[float, LaneSample]:

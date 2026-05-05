@@ -6,6 +6,7 @@ topics:
   static_obs_topic: /Obstacles/Static
   dynamic_obstacles_topic: /Obstacles/Dynamic
   routing_path_topic: /Routing/Path
+  map_file: ""
 
 vehicle:
   wheelbase_m: 0.324
@@ -57,4 +58,11 @@ qp:
 
 diagnostics:
   publish_debug: true
+
+lane_context:
+  lane_change_cost: 1.0
+  lane_allow_lane_change: true
+  route_hysteresis_rad: 0.25
+  lane_context_rebuild_distance_m: 0.25
+  lane_context_rebuild_yaw_rad: 0.35
 

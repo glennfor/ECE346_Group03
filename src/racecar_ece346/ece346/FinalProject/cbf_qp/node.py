@@ -4,6 +4,7 @@ import traceback
 
 import numpy as np
 import rclpy
+from ament_index_python.packages import get_package_share_directory
 from ackermann_msgs.msg import AckermannDriveStamped
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Odometry, Path
@@ -17,7 +18,7 @@ from .barrier import evaluate_barrier, implicit_barrier_value
 from .config import declare_and_load
 from .dynamics import control_jacobian, step
 from .guards import select_hard_guard_control
-from .lane_context import LaneContext
+from .lane_context import LaneContext, LaneletContextBuilder
 from .margins import MarginContext, margin_components
 from .obstacle_memory import ObstacleMemory
 from .qp import solve_box_halfspace_qp
@@ -34,13 +35,26 @@ class CbfQpSafetyFilterNode(Node):
     def __init__(self):
         super().__init__("safety_filter_node")
         self.params = declare_and_load(self)
+        if not self.params.map_file:
+            self.params.map_file = (
+                get_package_share_directory("racecar_routing") + "/maps/track.osm"
+            )
 
         self.delta_estimate = 0.0
         self.last_state = None
         self.last_odom_time = None
         self.last_human_msg = None
         self.last_human_time = None
+        self.last_lane_center = None
+        self.last_lane_yaw = None
         self.lane_context = LaneContext.fallback_straight()
+        self.lane_builder = LaneletContextBuilder(
+            self.params.map_file,
+            self,
+            self.params.lane_change_cost,
+            self.params.lane_allow_lane_change,
+            self.params.route_hysteresis_rad,
+        )
         self.static_memory = ObstacleMemory(
             self.params.obstacle_memory_ttl_s,
             self.params.obstacle_memory_growth,
@@ -57,7 +71,7 @@ class CbfQpSafetyFilterNode(Node):
         self.get_logger().info(
             "backup-cbf safety_filter_node ready: "
             f"odom={self.params.odom_topic}, human={self.params.human_control_topic}, "
-            f"path={self.params.routing_path_topic}, out={self.params.filtered_control_topic}"
+            f"map={self.params.map_file}, out={self.params.filtered_control_topic}"
         )
 
     def _setup_io(self):
@@ -87,13 +101,6 @@ class CbfQpSafetyFilterNode(Node):
             self.dynamic_obstacles_callback,
             10,
         )
-        self.path_sub = self.create_subscription(
-            Path,
-            self.params.routing_path_topic,
-            self.path_callback,
-            10,
-        )
-
         self.value_pub = self.create_publisher(Float32, "/safety/value", 1)
         self.grad_pub = self.create_publisher(Float64MultiArray, "/safety/grad", 1)
         self.override_pub = self.create_publisher(Bool, "/safety/override", 1)
@@ -107,6 +114,7 @@ class CbfQpSafetyFilterNode(Node):
     def odom_callback(self, msg: Odometry):
         self.last_state = odom_to_state(msg, self.delta_estimate, self.params)
         self.last_odom_time = self.get_clock().now().nanoseconds * 1e-9
+        self._maybe_rebuild_lane_context(self.last_state)
 
     def human_callback(self, msg: AckermannDriveStamped):
         self.last_human_msg = msg
@@ -121,9 +129,6 @@ class CbfQpSafetyFilterNode(Node):
 
     def dynamic_obstacles_callback(self, msg: OdometryArray):
         self.traffic = odometry_array_to_obstacles(msg, self.params.truck_radius_m)
-
-    def path_callback(self, msg: Path):
-        self.lane_context = LaneContext.from_path_msg(msg)
 
     def _human_control(self, state: np.ndarray) -> np.ndarray:
         if self.last_human_msg is None:
@@ -200,6 +205,23 @@ class CbfQpSafetyFilterNode(Node):
         pose.pose.orientation.z = float(np.sin(state[3] / 2.0))
         pose.pose.orientation.w = float(np.cos(state[3] / 2.0))
         return pose
+
+    def _maybe_rebuild_lane_context(self, state: np.ndarray):
+        position = state[:2]
+        if self.last_lane_center is not None:
+            distance_delta = np.linalg.norm(position - self.last_lane_center)
+            yaw_delta = abs((state[3] - self.last_lane_yaw + np.pi) % (2.0 * np.pi) - np.pi)
+            if (
+                distance_delta < self.params.lane_context_rebuild_distance_m
+                and yaw_delta < self.params.lane_context_rebuild_yaw_rad
+            ):
+                return
+        try:
+            self.lane_context = self.lane_builder.build_near(state)
+            self.last_lane_center = position.copy()
+            self.last_lane_yaw = float(state[3])
+        except Exception as exc:
+            self.get_logger().warn(f"lane context rebuild failed, using previous/fallback lane: {exc}")
 
     def control_step(self):
         now = self.get_clock().now().nanoseconds * 1e-9

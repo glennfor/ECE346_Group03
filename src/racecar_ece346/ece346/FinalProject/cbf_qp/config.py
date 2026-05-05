@@ -63,6 +63,8 @@ class SafetyFilterParams:
     routing_path_topic: str = "/Routing/Path"
     map_file: str = ""
     lane_change_cost: float = 1.0
+    lane_allow_lane_change: bool = True
+    route_hysteresis_rad: float = 0.25
     lane_context_rebuild_distance_m: float = 0.25
     lane_context_rebuild_yaw_rad: float = 0.35
     publish_debug: bool = True
