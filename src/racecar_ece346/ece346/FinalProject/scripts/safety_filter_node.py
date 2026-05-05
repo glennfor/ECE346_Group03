@@ -47,6 +47,7 @@ import math
 import rclpy
 from ackermann_msgs.msg import AckermannDriveStamped
 from ece346.FinalProject.cbf_qp.node import main as cbf_qp_main
+from ece346.FinalProject.ilqr.node import main as ilqr_main
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from visualization_msgs.msg import MarkerArray
@@ -192,8 +193,27 @@ def main(args=None):
     # finally:
     #     node.destroy_node()
     #     rclpy.shutdown()
-    cbf_qp_main(args=args)
+
+
+    # ===========================
+    # Test any other safety filter here
+    # ===========================
+
+    # ILQR-QP Safety Filter
+    ilqr_main(args=args)
+
+    # CBF-QP Safety Filter
+    # cbf_qp_main(args=args)
 
 
 if __name__ == '__main__':
     main()
+
+
+# implement a simple heuristic based CBF safety filter
+# such that it steers to center of the lane when the vehicle is going to going to go off the lane (with adjusted speed based on the distance to the lane)
+
+`# stop if obstcale is directly in front of the vehicle
+# if dynamic obstacles are in the way, stop 
+
+# simple implementation
