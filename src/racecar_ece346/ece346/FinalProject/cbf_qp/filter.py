@@ -56,8 +56,7 @@ class CbfQpFilter:
         ]
 
         feasible = [
-            command
-            for command in evaluated
+            command for command in evaluated
             if (command.lane_margin is None or command.lane_margin >= 0.0)
             and (command.obstacle_margin is None or command.obstacle_margin >= 0.0)
         ]
@@ -201,3 +200,4 @@ class CbfQpFilter:
         if obstacle_bad:
             return "obstacle"
         return "pass"
+

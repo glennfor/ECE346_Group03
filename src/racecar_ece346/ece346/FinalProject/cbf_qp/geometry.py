@@ -159,7 +159,8 @@ def closest_path_projection(
             width_right = (1.0 - t) * p0.right_width + t * p1.right_width
             speed_limit = (1.0 - t) * p0.speed_limit + t * p1.speed_limit
             tangent_yaw = math.atan2(vy, vx)
-            signed_lateral = (-math.sin(tangent_yaw) * dx + math.cos(tangent_yaw) * dy)
+            signed_lateral = (-math.sin(tangent_yaw) * dx
+                              + math.cos(tangent_yaw) * dy)
             best = (
                 PathPoint(proj_x, proj_y, width_left, width_right, speed_limit),
                 signed_lateral,
@@ -210,3 +211,4 @@ def min_obstacle_margin(
             margin = center_dist - obstacle.radius - safety_buffer
             best_margin = min(best_margin, margin)
     return best_margin
+
